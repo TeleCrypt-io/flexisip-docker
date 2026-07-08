@@ -330,16 +330,22 @@ jobs:
             --format '{{json .Config.Entrypoint}}'
 
           # EKT plugin must be present at the upstream's install layout.
-          PLUGIN="/opt/belledonne-communications/flexisip-conference/lib/liblinphone/plugins/linphone_ektserver.so"
-          echo "checking for EKT plugin at: $PLUGIN"
-          if docker run --rm \
+          # The target OUTPUT_NAME is "linphone_ektserver", so CMake installs
+          # it as "liblinphone_ektserver.so" (with the standard "lib" prefix).
+          PLUGIN_DIR="/opt/belledonne-communications/flexisip-conference/lib/liblinphone/plugins"
+          echo "looking for EKT plugin in: $PLUGIN_DIR"
+          found=$(docker run --rm \
               "ghcr.io/telecrypt-io/flexisip-conference:${CONFERENCE_VERSION}" \
-              test -f "$PLUGIN"; then
-            echo "OK: EKT plugin present"
-          else
-            echo "FAIL: EKT plugin missing at $PLUGIN" >&2
+              sh -c "ls -1 $PLUGIN_DIR 2>/dev/null | grep -E 'ektserver.*\.so$' || true")
+          if [ -z "$found" ]; then
+            echo "FAIL: no *ektserver*.so found in $PLUGIN_DIR" >&2
+            echo "Contents of $PLUGIN_DIR:" >&2
+            docker run --rm \
+                "ghcr.io/telecrypt-io/flexisip-conference:${CONFERENCE_VERSION}" \
+                ls -la "$PLUGIN_DIR" >&2 || true
             exit 1
           fi
+          echo "OK: EKT plugin present: $found"
 
           # Entrypoint must be executable.
           if ! docker run --rm \
