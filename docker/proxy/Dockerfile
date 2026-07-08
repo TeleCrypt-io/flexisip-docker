@@ -58,10 +58,26 @@ RUN cd /tmp \
  && ldconfig
 
 ARG FLEXISIP_VERSION=2.6.0
-RUN git clone --depth 1 --branch "${FLEXISIP_VERSION}" \
-    https://gitlab.linphone.org/BC/public/flexisip.git /src
+# Retry the clone + submodule fetch because gitlab.linphone.org is
+# sometimes flaky and a long submodule tree (30+ submodules) makes a
+# single attempt likely to hit a connection timeout.
+RUN for i in 1 2 3 4 5; do \
+      if git clone --depth 1 --branch "${FLEXISIP_VERSION}" \
+            https://gitlab.linphone.org/BC/public/flexisip.git /src; then \
+        break; \
+      fi; \
+      echo "git clone failed (attempt $i), retrying in 15s"; \
+      sleep 15; \
+      rm -rf /src; \
+    done
 WORKDIR /src
-RUN git submodule update --init --recursive
+RUN for i in 1 2 3 4 5; do \
+      if git submodule update --init --recursive; then \
+        break; \
+      fi; \
+      echo "submodule update failed (attempt $i), retrying in 15s"; \
+      sleep 15; \
+    done
 RUN cmake -G Ninja -B build \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DCMAKE_INSTALL_PREFIX=/opt/belledonne-communications \
