@@ -288,3 +288,55 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # -------------------------------------------------------------------------
+  # 5. Publish state: on success, record which upstream versions have a live
+  # Docker image. state/built.json is the source of truth for auto-bump to
+  # know what is already shipped.
+  # -------------------------------------------------------------------------
+  publish-state:
+    name: publish state/built.json
+    runs-on: ubuntu-24.04
+    needs: [build-proxy-image, build-conference-image]
+    if: success()
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout meta-repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read versions.env
+        id: vars
+        run: |
+          set -euo pipefail
+          . ./versions.env
+          {
+            echo "flexisip=${FLEXISIP_VERSION}"
+            echo "conference=${FLEXISIP_CONFERENCE_VERSION}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update state/built.json
+        run: |
+          set -euo pipefail
+          flexisip="${{ steps.vars.outputs.flexisip }}"
+          conference="${{ steps.vars.outputs.conference }}"
+
+          # Merge into existing state: keep keys that are not updated this run,
+          # overwrite keys we just built. This protects against a previous
+          # state/built.json that contains older-but-still-valid versions.
+          current="$(cat state/built.json 2>/dev/null || echo '{}')"
+          echo "$current" | jq --arg f "$flexisip" --arg c "$conference" \
+            '.flexisip = $f | ."flexisip-conference" = $c' \
+            > state/built.json.new
+          mv state/built.json.new state/built.json
+
+          echo "New state/built.json:"
+          cat state/built.json
+
+      - name: Commit state/built.json
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "state: record built versions (${{ steps.vars.outputs.flexisip }} / ${{ steps.vars.outputs.conference }})"
+          file_pattern: state/built.json
