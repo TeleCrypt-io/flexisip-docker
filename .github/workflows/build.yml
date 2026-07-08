@@ -4,8 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-  # auto-bump.yml also triggers a build by pushing a commit to main
-  workflow_call:
+    paths:
+      - 'versions.env'
+      - 'docker/**'
+      - '.github/workflows/build.yml'
 
 env:
   REGISTRY: ghcr.io
@@ -17,13 +19,16 @@ permissions:
 
 jobs:
   # -------------------------------------------------------------------------
-  # 1. Build proxy .deb package from upstream flexisip at versions.env tag
+  # Build .deb packages and publish to GitHub Releases as a bonus artifact
+  # for non-Docker users. The Docker images do NOT consume these.
+  # Only runs when versions.env has been modified.
   # -------------------------------------------------------------------------
-  build-proxy-deb:
-    name: build proxy .deb
+  build-debs:
+    name: build .deb packages (bonus)
     runs-on: ubuntu-24.04
-    outputs:
-      flexisip_version: ${{ steps.vars.outputs.flexisip_version }}
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.modified, 'versions.env')
     steps:
       - name: Checkout meta-repo
         uses: actions/checkout@v4
@@ -33,8 +38,10 @@ jobs:
         run: |
           set -euo pipefail
           . ./versions.env
-          echo "flexisip_version=${FLEXISIP_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Building flexisip at tag ${FLEXISIP_VERSION}"
+          {
+            echo "flexisip=${FLEXISIP_VERSION}"
+            echo "conference=${FLEXISIP_CONFERENCE_VERSION}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Install build dependencies
         run: |
@@ -64,23 +71,24 @@ jobs:
       - name: Clone flexisip at pinned tag
         run: |
           . ./versions.env
-          rm -rf src
+          rm -rf src-proxy
           git clone --depth 1 --branch "${FLEXISIP_VERSION}" \
-            https://gitlab.linphone.org/BC/public/flexisip.git src
-          cd src
+            https://gitlab.linphone.org/BC/public/flexisip.git src-proxy
+          cd src-proxy
           git submodule update --init --recursive
 
-      - name: Configure ccache
+      - name: Configure ccache (proxy)
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-ccache-proxy-${{ github.sha }}
+          key: ${{ runner.os }}-ccache-proxy-${{ steps.vars.outputs.flexisip }}
           restore-keys: ${{ runner.os }}-ccache-proxy-
 
       - name: Build proxy .deb
-        working-directory: src
+        working-directory: src-proxy
         run: |
-          export CC=gcc-14 CXX=g++-14
+          export CC=gcc-14
+          export CXX=g++-14
           mkdir build && cd build
           cmake -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -92,79 +100,27 @@ jobs:
             ..
           cmake --build . --target package
 
-      - name: Upload proxy .deb artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: flexisip-proxy-deb
-          path: src/build/*.deb
-
-  # -------------------------------------------------------------------------
-  # 2. Build conference .deb package (with EKT) from upstream at versions.env tag
-  # -------------------------------------------------------------------------
-  build-conference-deb:
-    name: build conference .deb
-    runs-on: ubuntu-24.04
-    outputs:
-      conference_version: ${{ steps.vars.outputs.conference_version }}
-    steps:
-      - name: Checkout meta-repo
-        uses: actions/checkout@v4
-
-      - name: Read versions.env
-        id: vars
-        run: |
-          set -euo pipefail
-          . ./versions.env
-          echo "conference_version=${FLEXISIP_CONFERENCE_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Building flexisip-conference at tag ${FLEXISIP_CONFERENCE_VERSION}"
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            ccache cmake ninja-build git python3 python3-pystache python3-six \
-            doxygen elfutils gcc-14 g++-14 clang-20 llvm make yasm dpkg-dev \
-            libsystemd-dev libssl-dev libboost-dev libboost-system-dev \
-            libboost-thread-dev libcpp-jwt-dev libhiredis-dev libjansson-dev \
-            libjsoncpp-dev libsqlite3-dev libpq-dev libmariadb-dev \
-            libmariadb-dev-compat libnghttp2-dev libsnmp-dev libxerces-c-dev \
-            libsrtp2-dev libgsm1-dev libopus-dev libmbedtls-dev libspeex-dev \
-            libspeexdsp-dev libxml2-dev libvpx-dev
-
-      - name: Build libnghttp2_asio 1.51.0
-        run: |
-          version=1.51.0
-          srcdir=nghttp2-${version}
-          srcpkg=${srcdir}.tar.gz
-          bindir=build_libnghttp2_asio
-          wget -q "https://github.com/nghttp2/nghttp2/releases/download/v${version}/${srcpkg}"
-          tar -xf "${srcpkg}"
-          cmake -S "${srcdir}" -B "${bindir}" -GNinja -DENABLE_ASIO_LIB=ON
-          sudo cmake --build "${bindir}" --target install
-          rm -rf "${srcpkg}" "${srcdir}" "${bindir}"
-
       - name: Clone flexisip-conference at pinned tag
         run: |
           . ./versions.env
-          rm -rf src
+          rm -rf src-conf
           git clone --depth 1 --branch "${FLEXISIP_CONFERENCE_VERSION}" \
-            https://gitlab.linphone.org/BC/public/flexisip-conference.git src
-          cd src
-          # The conference repo has a `flexisip` submodule used for cmake utilities only.
-          # We still init it so the build can find FlexisipUtils.cmake.
+            https://gitlab.linphone.org/BC/public/flexisip-conference.git src-conf
+          cd src-conf
           git submodule update --init --recursive
 
-      - name: Configure ccache
+      - name: Configure ccache (conference)
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-ccache-conference-${{ github.sha }}
+          key: ${{ runner.os }}-ccache-conference-${{ steps.vars.outputs.conference }}
           restore-keys: ${{ runner.os }}-ccache-conference-
 
-      - name: Build conference .deb (with EKT)
-        working-directory: src
+      - name: Build conference .deb
+        working-directory: src-conf
         run: |
-          export CC=gcc-14 CXX=g++-14
+          export CC=gcc-14
+          export CXX=g++-14
           mkdir build && cd build
           cmake -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -177,28 +133,49 @@ jobs:
             ..
           cmake --build . --target package
 
-      - name: Upload conference .deb artifact
-        uses: actions/upload-artifact@v4
+      - name: Create GitHub Release with .deb artifacts
+        uses: softprops/action-gh-release@v2
         with:
-          name: flexisip-conference-deb
-          path: src/build/*.deb
+          tag_name: flexisip-${{ steps.vars.outputs.flexisip }}_conference-${{ steps.vars.outputs.conference }}
+          name: "flexisip ${{ steps.vars.outputs.flexisip }} + flexisip-conference ${{ steps.vars.outputs.conference }}"
+          body: |
+            Automated release of `flexisip` and `flexisip-conference` .deb packages.
+
+            - **flexisip**: `${{ steps.vars.outputs.flexisip }}`
+            - **flexisip-conference**: `${{ steps.vars.outputs.conference }}`
+
+            These are the same binaries that ship in the Docker images:
+            - `ghcr.io/telecrypt-io/flexisip-proxy:${{ steps.vars.outputs.flexisip }}`
+            - `ghcr.io/telecrypt-io/flexisip-conference:${{ steps.vars.outputs.conference }}`
+
+            Install on Ubuntu 24.04 (with the runtime dependencies from the .deb's `Depends:` already satisfied):
+
+            ```bash
+            sudo apt install -y ./bc-flexisip_${{ steps.vars.outputs.flexisip }}-*_amd64.deb
+            sudo apt install -y ./bc-flexisip-conference_${{ steps.vars.outputs.conference }}-*_amd64.deb \
+                                ./bc-flexisip-conference-plugin-ektserver_${{ steps.vars.outputs.conference }}-*_amd64.deb
+            ```
+          files: |
+            src-proxy/build/*.deb
+            src-conf/build/*.deb
+          fail_on_unmatched_files: false
 
   # -------------------------------------------------------------------------
-  # 3. Build & push proxy image
+  # Build & push proxy image (multi-stage Dockerfile, no .deb input)
   # -------------------------------------------------------------------------
   build-proxy-image:
     name: build & push proxy image
     runs-on: ubuntu-24.04
-    needs: build-proxy-deb
     steps:
       - name: Checkout meta-repo
         uses: actions/checkout@v4
 
-      - name: Download proxy .deb
-        uses: actions/download-artifact@v4
-        with:
-          name: flexisip-proxy-deb
-          path: dist/
+      - name: Read versions.env
+        id: vars
+        run: |
+          set -euo pipefail
+          . ./versions.env
+          echo "FLEXISIP_VERSION=${FLEXISIP_VERSION}" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -217,7 +194,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/flexisip-proxy
           tags: |
             type=raw,value=latest
-            type=raw,value=${{ needs.build-proxy-deb.outputs.flexisip_version }}
+            type=raw,value=${FLEXISIP_VERSION}
           labels: |
             org.opencontainers.image.title=flexisip-proxy
             org.opencontainers.image.description=SIP proxy (unofficial community build) for TeleCrypt-io
@@ -230,6 +207,7 @@ jobs:
         with:
           context: .
           file: docker/proxy/Dockerfile
+          build-args: FLEXISIP_VERSION=${FLEXISIP_VERSION}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -237,21 +215,21 @@ jobs:
           cache-to: type=gha,mode=max
 
   # -------------------------------------------------------------------------
-  # 4. Build & push conference image
+  # Build & push conference image (multi-stage Dockerfile, no .deb input)
   # -------------------------------------------------------------------------
   build-conference-image:
     name: build & push conference image
     runs-on: ubuntu-24.04
-    needs: build-conference-deb
     steps:
       - name: Checkout meta-repo
         uses: actions/checkout@v4
 
-      - name: Download conference .deb
-        uses: actions/download-artifact@v4
-        with:
-          name: flexisip-conference-deb
-          path: dist/
+      - name: Read versions.env
+        id: vars
+        run: |
+          set -euo pipefail
+          . ./versions.env
+          echo "FLEXISIP_CONFERENCE_VERSION=${FLEXISIP_CONFERENCE_VERSION}" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -270,10 +248,10 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/flexisip-conference
           tags: |
             type=raw,value=latest
-            type=raw,value=${{ needs.build-conference-deb.outputs.conference_version }}
+            type=raw,value=${FLEXISIP_CONFERENCE_VERSION}
           labels: |
             org.opencontainers.image.title=flexisip-conference
-            org.opencontainers.image.description=Conference server (unofficial community build) for TeleCrypt-io, with optional EKT plugin for E2EE
+            org.opencontainers.image.description=Conference server (unofficial community build) for TeleCrypt-io, with EKT plugin for E2EE
             org.opencontainers.image.licenses=AGPL-3.0
             org.opencontainers.image.source=https://github.com/TeleCrypt-io/flexisip-docker
             org.opencontainers.image.vendor=TeleCrypt-io
@@ -283,6 +261,7 @@ jobs:
         with:
           context: .
           file: docker/conference/Dockerfile
+          build-args: FLEXISIP_CONFERENCE_VERSION=${FLEXISIP_CONFERENCE_VERSION}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -290,9 +269,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   # -------------------------------------------------------------------------
-  # 5. Smoke test: pull the just-pushed images and verify they look right.
-  # This catches problems that dpkg-build can't see (e.g. plugin file present
-  # in package but missing from image, or runtime script error).
+  # Smoke test the just-built images
   # -------------------------------------------------------------------------
   smoke-test:
     name: smoke test images
@@ -310,9 +287,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Read versions
+        id: vars
+        run: |
+          set -euo pipefail
+          . ./versions.env
+          {
+            echo "flexisip=${FLEXISIP_VERSION}"
+            echo "conference=${FLEXISIP_CONFERENCE_VERSION}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Pull proxy image
         env:
-          FLEXISIP_VERSION: ${{ needs.build-proxy-deb.outputs.flexisip_version }}
+          FLEXISIP_VERSION: ${{ steps.vars.outputs.flexisip }}
         run: |
           set -euo pipefail
           docker pull "ghcr.io/telecrypt-io/flexisip-proxy:${FLEXISIP_VERSION}"
@@ -328,7 +315,7 @@ jobs:
 
       - name: Pull conference image and verify EKT plugin
         env:
-          CONFERENCE_VERSION: ${{ needs.build-conference-deb.outputs.conference_version }}
+          CONFERENCE_VERSION: ${{ steps.vars.outputs.conference }}
         run: |
           set -euo pipefail
           docker pull "ghcr.io/telecrypt-io/flexisip-conference:${CONFERENCE_VERSION}"
@@ -339,8 +326,7 @@ jobs:
           docker inspect "ghcr.io/telecrypt-io/flexisip-conference:${CONFERENCE_VERSION}" \
             --format '{{json .Config.Entrypoint}}'
 
-          # The EKT plugin must be present. Its location is determined by
-          # ${LibLinphone_PLUGINS_DIR} at the conference's install prefix.
+          # EKT plugin must be present at the upstream's install layout.
           PLUGIN="/opt/belledonne-communications/flexisip-conference/lib/liblinphone/plugins/linphone_ektserver.so"
           echo "checking for EKT plugin at: $PLUGIN"
           if docker run --rm \
@@ -352,7 +338,7 @@ jobs:
             exit 1
           fi
 
-          # Verify entrypoint exists and is executable.
+          # Entrypoint must be executable.
           if ! docker run --rm \
               "ghcr.io/telecrypt-io/flexisip-conference:${CONFERENCE_VERSION}" \
               test -x /usr/local/bin/entrypoint.sh; then
@@ -361,17 +347,15 @@ jobs:
           fi
           echo "OK: entrypoint.sh is executable"
 
-          # Verify entrypoint logs the expected lines (without ENABLE_EKT_SERVER).
-          out=$(docker run --rm \
+          # Smoke-run the entrypoint (no config mounted) so we can see the log
+          # in the Actions UI.
+          echo "--- entrypoint run output ---"
+          docker run --rm \
               "ghcr.io/telecrypt-io/flexisip-conference:${CONFERENCE_VERSION}" \
-              true 2>&1 || true)
-          echo "entrypoint output (no config mounted):"
-          echo "$out"
+              true 2>&1 || true
 
   # -------------------------------------------------------------------------
-  # 6. Publish state: on success, record which upstream versions have a live
-  # Docker image. state/built.json is the source of truth for auto-bump to
-  # know what is already shipped.
+  # Publish state/built.json on full success.
   # -------------------------------------------------------------------------
   publish-state:
     name: publish state/built.json
@@ -403,8 +387,7 @@ jobs:
           conference="${{ steps.vars.outputs.conference }}"
 
           # Merge into existing state: keep keys that are not updated this run,
-          # overwrite keys we just built. This protects against a previous
-          # state/built.json that contains older-but-still-valid versions.
+          # overwrite keys we just built.
           current="$(cat state/built.json 2>/dev/null || echo '{}')"
           echo "$current" | jq --arg f "$flexisip" --arg c "$conference" \
             '.flexisip = $f | ."flexisip-conference" = $c' \
@@ -419,4 +402,3 @@ jobs:
         with:
           commit_message: "state: record built versions (${{ steps.vars.outputs.flexisip }} / ${{ steps.vars.outputs.conference }})"
           file_pattern: state/built.json
-

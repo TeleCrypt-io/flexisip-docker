@@ -1,62 +1,117 @@
-# Unofficial community build of the Flexisip conference server.
-# Built from official AGPL-licensed source. See NOTICE for attribution.
-FROM ubuntu:24.04
+# Multi-stage build for the Flexisip conference server, with EKT plugin.
+# Stage 1 builds from upstream source with -DENABLE_EKT_SERVER=ON; stage 2
+# is a clean runtime image. Unofficial community build. See NOTICE for
+# attribution.
 
+# ---- builder stage --------------------------------------------------------
+FROM ubuntu:24.04 AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 
-# OCI metadata
+# Build tools + flexisip-conference's dev dependencies.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ccache \
+    cmake \
+    git \
+    ninja-build \
+    pkg-config \
+    wget \
+    libssl-dev \
+    libhiredis-dev \
+    libjansson-dev \
+    libjsoncpp-dev \
+    libsqlite3-dev \
+    libpq-dev \
+    libmariadb-dev \
+    libmariadb-dev-compat \
+    libnghttp2-dev \
+    libsnmp-dev \
+    libxerces-c-dev \
+    libsrtp2-dev \
+    libgsm1-dev \
+    libopus-dev \
+    libmbedtls-dev \
+    libspeex-dev \
+    libspeexdsp-dev \
+    libxml2-dev \
+    libvpx-dev \
+    libsystemd-dev \
+    libboost-dev \
+    libboost-system-dev \
+    libboost-thread-dev \
+    libcpp-jwt-dev \
+    nlohmann-json3-dev \
+    libsoci-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+# Build libnghttp2_asio 1.51.0 from source (not in Ubuntu 24.04 repos).
+RUN cd /tmp \
+ && wget -q https://github.com/nghttp2/nghttp2/releases/download/v1.51.0/nghttp2-1.51.0.tar.gz \
+ && tar -xf nghttp2-1.51.0.tar.gz \
+ && cmake -S nghttp2-1.51.0 -B nghttp2-1.51.0/build -GNinja -DENABLE_ASIO_LIB=ON \
+ && cmake --build nghttp2-1.51.0/build --target install \
+ && rm -rf nghttp2-1.51.0 nghttp2-1.51.0.tar.gz \
+ && ldconfig
+
+ARG FLEXISIP_CONFERENCE_VERSION=1.0.0
+RUN git clone --depth 1 --branch "${FLEXISIP_CONFERENCE_VERSION}" \
+    https://gitlab.linphone.org/BC/public/flexisip-conference.git /src
+WORKDIR /src
+RUN git submodule update --init --recursive
+RUN cmake -G Ninja -B build \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_INSTALL_PREFIX=/install \
+        -DENABLE_G729=ON \
+        -DENABLE_EKT_SERVER=ON \
+ && cmake --build build \
+ && cmake --install build --prefix /install
+
+# ---- runtime stage --------------------------------------------------------
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+
 LABEL org.opencontainers.image.title="flexisip-conference"
-LABEL org.opencontainers.image.description="Conference server (unofficial community build) for TeleCrypt-io, with optional EKT plugin for E2EE"
+LABEL org.opencontainers.image.description="Conference server (unofficial community build) for TeleCrypt-io, with EKT plugin for E2EE"
 LABEL org.opencontainers.image.licenses="AGPL-3.0"
 LABEL org.opencontainers.image.source="https://github.com/TeleCrypt-io/flexisip-docker"
 LABEL org.opencontainers.image.vendor="TeleCrypt-io"
 LABEL org.opencontainers.image.documentation="https://github.com/TeleCrypt-io/flexisip-docker/blob/main/README.md"
 
-# Install runtime dependencies. These must match the libraries the .deb packages link against.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      ca-certificates \
-      libsystemd0 \
-      libssl3 \
-      libboost-system1.83.0 \
-      libboost-thread1.83.0 \
-      libhiredis1.1.0 \
-      libjansson4 \
-      libjsoncpp25 \
-      libsqlite3-0 \
-      libpq5 \
-      libmariadb3 \
-      libnghttp2-14 \
-      libsnmp40 \
-      libxerces-c3.2 \
-      libsrtp2-1 \
-      libgsm1 \
-      libopus0 \
-      libmbedtls14 \
-      libspeex1 \
-      libspeexdsp1 \
-      libxml2 \
-      libvpx9 \
+# Runtime libraries the conference binary links against. Names use the t64
+# ABI where the upstream .deb's Depends declares them. Note: no python3
+# packages, no libcpp-jwt (header-only on Ubuntu 24.04).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libsystemd0 \
+    libssl3t64 \
+    libboost-system1.83.0 \
+    libboost-thread1.83.0 \
+    libhiredis1.1.0 \
+    libjansson4 \
+    libjsoncpp25 \
+    libsqlite3-0 \
+    libpq5 \
+    libmariadb3 \
+    libnghttp2-14 \
+    libsnmp40t64 \
+    libxerces-c3.2t64 \
+    libsrtp2-1 \
+    libgsm1 \
+    libopus0 \
+    libspeex1 \
+    libspeexdsp1 \
+    libxml2 \
+    libvpx9 \
  && rm -rf /var/lib/apt/lists/*
 
-# Install the conference .deb packages, including the EKT plugin.
-# Expected to be in the build context as dist/bc-flexisip-conference*.deb
-COPY dist/bc-flexisip-conference*.deb /tmp/debs/
-RUN apt-get update \
- && apt-get install -y --no-install-recommends /tmp/debs/*.deb \
- && rm -rf /tmp/debs /var/lib/apt/lists/*
+# Bring in the built conference server (including the EKT plugin) from the
+# builder stage.
+COPY --from=builder /install /
 
-# Persistent data and config
 VOLUME ["/etc/opt/belledonne-communications"]
 VOLUME ["/var/opt/belledonne-communications"]
 
-# Conference server listens on the proxy on localhost:6064 by default;
-# no external ports need to be exposed in the standard layout.
-
-# Entrypoint handles E2EE opt-in by appending SFU + ZRTP settings to the config
-# when ENABLE_EKT_SERVER=true.
 COPY docker/conference/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-
 CMD ["flexisip-conference", "-c", "/etc/opt/belledonne-communications/flexisip-conference/flexisip-conference.conf"]
