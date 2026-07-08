@@ -1,0 +1,114 @@
+# docker-compose.yml — example layout for a small self-hosted E2EE-capable
+# Flexisip deployment.
+#
+# Adjust:
+#   - SIP_DOMAIN: your real DNS name
+#   - TLS_CERT_DIR: path to your Let's Encrypt or other TLS cert (read-only mount)
+#   - DB passwords: rotate the placeholders
+#   - TURN_PUBLIC_IP: the public IP of the host running coturn
+#
+# First run:
+#   docker compose up -d
+#   docker compose logs -f proxy conference
+
+services:
+  proxy:
+    image: ghcr.io/telecrypt-io/flexisip-proxy:latest
+    container_name: flexisip-proxy
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - SIP_DOMAIN=${SIP_DOMAIN:-sip.example.com}
+    volumes:
+      - ${TLS_CERT_DIR:-./certs}:/etc/flexisip/tls:ro
+      - ./config/flexisip.conf:/etc/opt/belledonne-communications/flexisip/flexisip.conf:ro
+      - proxy_data:/var/opt/belledonne-communications
+    # The proxy needs host network so it owns the public SIP TLS port (5061).
+    # If you cannot use host network, expose 5061/tcp + 5061/udp instead and
+    # set the global "nat-addresses" to the host's public IP.
+    # ports:
+    #   - "5061:5061/tcp"
+    #   - "5061:5061/udp"
+
+  conference:
+    image: ghcr.io/telecrypt-io/flexisip-conference:latest
+    container_name: flexisip-conference
+    restart: unless-stopped
+    environment:
+      # Set to "true" to enable true end-to-end encrypted conferences.
+      # Requires the EKT plugin (already installed in the image) and configures
+      # the conference server in SFU mode with ZRTP media encryption.
+      - ENABLE_EKT_SERVER=${ENABLE_EKT_SERVER:-false}
+    volumes:
+      - ./config/flexisip-conference.conf:/etc/opt/belledonne-communications/flexisip-conference/flexisip-conference.conf:ro
+      - conference_data:/var/opt/belledonne-communications
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # No external ports; the conference server talks to the proxy on
+    # localhost:6064 inside the proxy container (since the proxy uses host network,
+    # the conference reaches it through the host's 127.0.0.1:5060 outbound-proxy).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # If you change this to bridge networking, update flexisip-conference.conf
+    # to use the proxy's service name as the outbound-proxy host.
+
+  mariadb:
+    image: mariadb:11.4
+    container_name: flexisip-mariadb
+    restart: unless-stopped
+    environment:
+      - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD:-rootpw-CHANGEME}
+      - MARIADB_DATABASE=flexisip_conference
+      - MARIADB_USER=flexisip_conference
+      - MARIADB_PASSWORD=${MARIADB_CONFERENCE_PASSWORD:-confpw-CHANGEME}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: flexisip-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  coturn:
+    image: coturn/coturn:4.6
+    container_name: flexisip-coturn
+    restart: unless-stopped
+    network_mode: host
+    command: >
+      -n
+      --log-file=stdout
+      --realm=${TURN_REALM:-sip.example.com}
+      --listening-port=3478
+      --tls-listening-port=5349
+      --relay-ip=0.0.0.0
+      --external-ip=${TURN_PUBLIC_IP}
+      --min-port=49152
+      --max-port=49200
+      --fingerprint
+      --lt-cred-mech
+      --user=${TURN_USER:-turnuser}:${TURN_PASSWORD:-turnpw-CHANGEME}
+      --no-tls
+      --no-dtls
+    # Use host network so TURN can bind the relay port range directly.
+
+volumes:
+  mariadb_data:
+  redis_data:
+  proxy_data:
+  conference_data:
