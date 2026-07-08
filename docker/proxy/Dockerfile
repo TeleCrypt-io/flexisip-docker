@@ -45,6 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libboost-dev \
     libboost-system-dev \
     libboost-thread-dev \
+    libcpp-jwt-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # Build libnghttp2_asio 1.51.0 from source (not in Ubuntu 24.04 repos).
