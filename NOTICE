@@ -1,0 +1,50 @@
+flexisip-docker (unofficial community build)
+Copyright (C) 2026 TeleCrypt-io
+
+This build aggregates the following upstream projects, which are
+Copyright (C) Belledonne Communications and dual-licensed under
+GNU AGPLv3 / proprietary commercial license:
+
+- Flexisip:
+  <https://gitlab.linphone.org/BC/public/flexisip>
+- flexisip-conference:
+  <https://gitlab.linphone.org/BC/public/flexisip-conference>
+- Linphone SDK (transitive dependency, fetched during build):
+  <https://gitlab.linphone.org/BC/public/linphone-sdk>
+
+This package uses the AGPLv3-licensed version of those projects. By using
+the Docker images published by this repository, you accept the AGPLv3
+terms of the upstream components.
+
+---
+
+EKT plugin license note:
+
+The EKT server plugin (Encrypted Key Transport, RFC 8870) is included in
+the `flexisip-conference` image for end-to-end encrypted conferences.
+
+The upstream `ENABLE_EKT_SERVER` CMake option in `flexisip-conference`
+declares:
+
+> Enable Encrypted Key Transport server. For customers under a proprietary
+> license, this functionality is under a specific license.
+
+The plugin's own README, however, declares GNU AGPLv3. This build treats
+the plugin as AGPL-compatible and enables it via the build option
+`-DENABLE_EKT_SERVER=ON` for the conference package. If you intend to
+redistribute the resulting binaries under terms incompatible with AGPLv3,
+or operate a hosted service without source disclosure, you may need a
+separate license from Belledonne Communications. **This is not legal
+advice.**
+
+---
+
+All original copyright notices and license texts from the upstream
+projects are preserved in their respective submodules (during the build
+process) and should be retained in any redistribution of the resulting
+images.
+
+This is **NOT** an official Belledonne Communications build. "Linphone"
+and "Flexisip" are trademarks of Belledonne Communications. This
+repository's use of those names is for descriptive purposes only and
+does not imply endorsement.
