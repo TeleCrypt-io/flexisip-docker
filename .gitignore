@@ -1,0 +1,25 @@
+# Build artifacts
+dist/
+build/
+work/
+*.deb
+*.ddeb
+*.rpm
+*.tar.gz
+*.tar.bz2
+ccache/
+
+# Local environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
