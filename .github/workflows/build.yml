@@ -277,6 +277,9 @@ jobs:
     needs: [build-proxy-image, build-conference-image]
     if: success()
     steps:
+      - name: Checkout meta-repo
+        uses: actions/checkout@v4
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
