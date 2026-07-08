@@ -85,10 +85,10 @@ jobs:
       - name: Decide whether to update versions.env
         id: decide
         env:
-          CUR_FLEXISIP=${{ steps.current.outputs.flexisip }}
-          CUR_CONFERENCE=${{ steps.current.outputs.conference }}
-          LATEST_FLEXISIP=${{ steps.latest-flexisip.outputs.tag }}
-          LATEST_CONFERENCE=${{ steps.latest-conference.outputs.tag }}
+          CUR_FLEXISIP: "${{ steps.current.outputs.flexisip }}"
+          CUR_CONFERENCE: "${{ steps.current.outputs.conference }}"
+          LATEST_FLEXISIP: "${{ steps.latest-flexisip.outputs.tag }}"
+          LATEST_CONFERENCE: "${{ steps.latest-conference.outputs.tag }}"
         run: |
           set -euo pipefail
           built_flexisip=$(jq -r '.flexisip // ""' state/built.json)
