@@ -20,7 +20,6 @@ RUN apt-get update \
       libssl3 \
       libboost-system1.83.0 \
       libboost-thread1.83.0 \
-      libcpp-jwt0 \
       libhiredis1.1.0 \
       libjansson4 \
       libjsoncpp25 \
