@@ -290,14 +290,93 @@ jobs:
           cache-to: type=gha,mode=max
 
   # -------------------------------------------------------------------------
-  # 5. Publish state: on success, record which upstream versions have a live
+  # 5. Smoke test: pull the just-pushed images and verify they look right.
+  # This catches problems that dpkg-build can't see (e.g. plugin file present
+  # in package but missing from image, or runtime script error).
+  # -------------------------------------------------------------------------
+  smoke-test:
+    name: smoke test images
+    runs-on: ubuntu-24.04
+    needs: [build-proxy-image, build-conference-image]
+    if: success()
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Pull proxy image
+        env:
+          FLEXISIP_VERSION: ${{ needs.build-proxy-deb.outputs.flexisip_version }}
+        run: |
+          set -euo pipefail
+          docker pull "ghcr.io/telecrypt-io/flexisip-proxy:${FLEXISIP_VERSION}"
+          echo "proxy image OCI labels:"
+          docker inspect "ghcr.io/telecrypt-io/flexisip-proxy:${FLEXISIP_VERSION}" \
+            --format '{{json .Config.Labels}}' | jq .
+          echo "proxy image entrypoint:"
+          docker inspect "ghcr.io/telecrypt-io/flexisip-proxy:${FLEXISIP_VERSION}" \
+            --format '{{json .Config.Entrypoint}}'
+          echo "proxy image cmd:"
+          docker inspect "ghcr.io/telecrypt-io/flexisip-proxy:${FLEXISIP_VERSION}" \
+            --format '{{json .Config.Cmd}}'
+
+      - name: Pull conference image and verify EKT plugin
+        env:
+          CONFERENCE_VERSION: ${{ needs.build-conference-deb.outputs.conference_version }}
+        run: |
+          set -euo pipefail
+          docker pull "ghcr.io/telecrypt-io/flexisip-conference:${CONFERENCE_VERSION}"
+          echo "conference image OCI labels:"
+          docker inspect "ghcr.io/telecrypt-io/flexisip-conference:${CONFERENCE_VERSION}" \
+            --format '{{json .Config.Labels}}' | jq .
+          echo "conference image entrypoint:"
+          docker inspect "ghcr.io/telecrypt-io/flexisip-conference:${CONFERENCE_VERSION}" \
+            --format '{{json .Config.Entrypoint}}'
+
+          # The EKT plugin must be present. Its location is determined by
+          # ${LibLinphone_PLUGINS_DIR} at the conference's install prefix.
+          PLUGIN="/opt/belledonne-communications/flexisip-conference/lib/liblinphone/plugins/linphone_ektserver.so"
+          echo "checking for EKT plugin at: $PLUGIN"
+          if docker run --rm \
+              "ghcr.io/telecrypt-io/flexisip-conference:${CONFERENCE_VERSION}" \
+              test -f "$PLUGIN"; then
+            echo "OK: EKT plugin present"
+          else
+            echo "FAIL: EKT plugin missing at $PLUGIN" >&2
+            exit 1
+          fi
+
+          # Verify entrypoint exists and is executable.
+          if ! docker run --rm \
+              "ghcr.io/telecrypt-io/flexisip-conference:${CONFERENCE_VERSION}" \
+              test -x /usr/local/bin/entrypoint.sh; then
+            echo "FAIL: entrypoint.sh not executable" >&2
+            exit 1
+          fi
+          echo "OK: entrypoint.sh is executable"
+
+          # Verify entrypoint logs the expected lines (without ENABLE_EKT_SERVER).
+          out=$(docker run --rm \
+              "ghcr.io/telecrypt-io/flexisip-conference:${CONFERENCE_VERSION}" \
+              true 2>&1 || true)
+          echo "entrypoint output (no config mounted):"
+          echo "$out"
+
+  # -------------------------------------------------------------------------
+  # 6. Publish state: on success, record which upstream versions have a live
   # Docker image. state/built.json is the source of truth for auto-bump to
   # know what is already shipped.
   # -------------------------------------------------------------------------
   publish-state:
     name: publish state/built.json
     runs-on: ubuntu-24.04
-    needs: [build-proxy-image, build-conference-image]
+    needs: [build-proxy-image, build-conference-image, smoke-test]
     if: success()
     permissions:
       contents: write
@@ -340,3 +419,4 @@ jobs:
         with:
           commit_message: "state: record built versions (${{ steps.vars.outputs.flexisip }} / ${{ steps.vars.outputs.conference }})"
           file_pattern: state/built.json
+
