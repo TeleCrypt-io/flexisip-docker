@@ -67,12 +67,12 @@ WORKDIR /src
 RUN git submodule update --init --recursive
 RUN cmake -G Ninja -B build \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-        -DCMAKE_INSTALL_PREFIX=/install \
+        -DCMAKE_INSTALL_PREFIX=/opt/belledonne-communications/flexisip-conference \
         -DENABLE_G729=ON \
         -DENABLE_EKT_SERVER=ON \
  && cmake --build build \
- && cmake --install build --prefix /install \
- && tar -C / -czf /install.tgz install
+ && cmake --install build \
+ && tar -C / -czf /install.tgz opt
 
 # ---- runtime stage --------------------------------------------------------
 FROM ubuntu:24.04
