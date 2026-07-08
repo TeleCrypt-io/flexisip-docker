@@ -1,0 +1,290 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  # auto-bump.yml also triggers a build by pushing a commit to main
+  workflow_call:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: telecrypt-io
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # -------------------------------------------------------------------------
+  # 1. Build proxy .deb package from upstream flexisip at versions.env tag
+  # -------------------------------------------------------------------------
+  build-proxy-deb:
+    name: build proxy .deb
+    runs-on: ubuntu-24.04
+    outputs:
+      flexisip_version: ${{ steps.vars.outputs.flexisip_version }}
+    steps:
+      - name: Checkout meta-repo
+        uses: actions/checkout@v4
+
+      - name: Read versions.env
+        id: vars
+        run: |
+          set -euo pipefail
+          . ./versions.env
+          echo "flexisip_version=${FLEXISIP_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Building flexisip at tag ${FLEXISIP_VERSION}"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ccache cmake ninja-build git python3 python3-pystache python3-six \
+            doxygen elfutils gcc-14 g++-14 clang-20 llvm make yasm dpkg-dev \
+            libsystemd-dev libssl-dev libboost-dev libboost-system-dev \
+            libboost-thread-dev libcpp-jwt-dev libhiredis-dev libjansson-dev \
+            libjsoncpp-dev libsqlite3-dev libpq-dev libmariadb-dev \
+            libmariadb-dev-compat libnghttp2-dev libsnmp-dev libxerces-c-dev \
+            libsrtp2-dev libgsm1-dev libopus-dev libmbedtls-dev libspeex-dev \
+            libspeexdsp-dev libxml2-dev libvpx-dev
+
+      - name: Build libnghttp2_asio 1.51.0
+        run: |
+          version=1.51.0
+          srcdir=nghttp2-${version}
+          srcpkg=${srcdir}.tar.gz
+          bindir=build_libnghttp2_asio
+          wget -q "https://github.com/nghttp2/nghttp2/releases/download/v${version}/${srcpkg}"
+          tar -xf "${srcpkg}"
+          cmake -S "${srcdir}" -B "${bindir}" -GNinja -DENABLE_ASIO_LIB=ON
+          sudo cmake --build "${bindir}" --target install
+          rm -rf "${srcpkg}" "${srcdir}" "${bindir}"
+
+      - name: Clone flexisip at pinned tag
+        run: |
+          . ./versions.env
+          rm -rf src
+          git clone --depth 1 --branch "${FLEXISIP_VERSION}" \
+            https://gitlab.linphone.org/BC/public/flexisip.git src
+          cd src
+          git submodule update --init --recursive
+
+      - name: Configure ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ${{ runner.os }}-ccache-proxy-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-ccache-proxy-
+
+      - name: Build proxy .deb
+        working-directory: src
+        run: |
+          export CC=gcc-14 CXX=g++-14
+          mkdir build && cd build
+          cmake -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_INSTALL_PREFIX=/opt/belledonne-communications \
+            -DSYSCONF_INSTALL_DIR=/etc \
+            -DFLEXISIP_SYSTEMD_INSTALL_DIR=/usr/lib/systemd/system \
+            -DCPACK_GENERATOR=DEB \
+            -DENABLE_G729=ON \
+            ..
+          cmake --build . --target package
+
+      - name: Upload proxy .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flexisip-proxy-deb
+          path: src/build/*.deb
+
+  # -------------------------------------------------------------------------
+  # 2. Build conference .deb package (with EKT) from upstream at versions.env tag
+  # -------------------------------------------------------------------------
+  build-conference-deb:
+    name: build conference .deb
+    runs-on: ubuntu-24.04
+    outputs:
+      conference_version: ${{ steps.vars.outputs.conference_version }}
+    steps:
+      - name: Checkout meta-repo
+        uses: actions/checkout@v4
+
+      - name: Read versions.env
+        id: vars
+        run: |
+          set -euo pipefail
+          . ./versions.env
+          echo "conference_version=${FLEXISIP_CONFERENCE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Building flexisip-conference at tag ${FLEXISIP_CONFERENCE_VERSION}"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ccache cmake ninja-build git python3 python3-pystache python3-six \
+            doxygen elfutils gcc-14 g++-14 clang-20 llvm make yasm dpkg-dev \
+            libsystemd-dev libssl-dev libboost-dev libboost-system-dev \
+            libboost-thread-dev libcpp-jwt-dev libhiredis-dev libjansson-dev \
+            libjsoncpp-dev libsqlite3-dev libpq-dev libmariadb-dev \
+            libmariadb-dev-compat libnghttp2-dev libsnmp-dev libxerces-c-dev \
+            libsrtp2-dev libgsm1-dev libopus-dev libmbedtls-dev libspeex-dev \
+            libspeexdsp-dev libxml2-dev libvpx-dev
+
+      - name: Build libnghttp2_asio 1.51.0
+        run: |
+          version=1.51.0
+          srcdir=nghttp2-${version}
+          srcpkg=${srcdir}.tar.gz
+          bindir=build_libnghttp2_asio
+          wget -q "https://github.com/nghttp2/nghttp2/releases/download/v${version}/${srcpkg}"
+          tar -xf "${srcpkg}"
+          cmake -S "${srcdir}" -B "${bindir}" -GNinja -DENABLE_ASIO_LIB=ON
+          sudo cmake --build "${bindir}" --target install
+          rm -rf "${srcpkg}" "${srcdir}" "${bindir}"
+
+      - name: Clone flexisip-conference at pinned tag
+        run: |
+          . ./versions.env
+          rm -rf src
+          git clone --depth 1 --branch "${FLEXISIP_CONFERENCE_VERSION}" \
+            https://gitlab.linphone.org/BC/public/flexisip-conference.git src
+          cd src
+          # The conference repo has a `flexisip` submodule used for cmake utilities only.
+          # We still init it so the build can find FlexisipUtils.cmake.
+          git submodule update --init --recursive
+
+      - name: Configure ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ${{ runner.os }}-ccache-conference-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-ccache-conference-
+
+      - name: Build conference .deb (with EKT)
+        working-directory: src
+        run: |
+          export CC=gcc-14 CXX=g++-14
+          mkdir build && cd build
+          cmake -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_INSTALL_PREFIX=/opt/belledonne-communications/flexisip-conference \
+            -DFLEXISIP_SYSTEMD_INSTALL_DIR=/usr/lib/systemd/system \
+            -DLOGROTATE_DIR=/etc/logrotate.d \
+            -DCPACK_GENERATOR=DEB \
+            -DENABLE_G729=ON \
+            -DENABLE_EKT_SERVER=ON \
+            ..
+          cmake --build . --target package
+
+      - name: Upload conference .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flexisip-conference-deb
+          path: src/build/*.deb
+
+  # -------------------------------------------------------------------------
+  # 3. Build & push proxy image
+  # -------------------------------------------------------------------------
+  build-proxy-image:
+    name: build & push proxy image
+    runs-on: ubuntu-24.04
+    needs: build-proxy-deb
+    steps:
+      - name: Checkout meta-repo
+        uses: actions/checkout@v4
+
+      - name: Download proxy .deb
+        uses: actions/download-artifact@v4
+        with:
+          name: flexisip-proxy-deb
+          path: dist/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/flexisip-proxy
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ needs.build-proxy-deb.outputs.flexisip_version }}
+          labels: |
+            org.opencontainers.image.title=flexisip-proxy
+            org.opencontainers.image.description=SIP proxy (unofficial community build) for TeleCrypt-io
+            org.opencontainers.image.licenses=AGPL-3.0
+            org.opencontainers.image.source=https://github.com/TeleCrypt-io/flexisip-docker
+            org.opencontainers.image.vendor=TeleCrypt-io
+
+      - name: Build & push proxy image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/proxy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # -------------------------------------------------------------------------
+  # 4. Build & push conference image
+  # -------------------------------------------------------------------------
+  build-conference-image:
+    name: build & push conference image
+    runs-on: ubuntu-24.04
+    needs: build-conference-deb
+    steps:
+      - name: Checkout meta-repo
+        uses: actions/checkout@v4
+
+      - name: Download conference .deb
+        uses: actions/download-artifact@v4
+        with:
+          name: flexisip-conference-deb
+          path: dist/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/flexisip-conference
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ needs.build-conference-deb.outputs.conference_version }}
+          labels: |
+            org.opencontainers.image.title=flexisip-conference
+            org.opencontainers.image.description=Conference server (unofficial community build) for TeleCrypt-io, with optional EKT plugin for E2EE
+            org.opencontainers.image.licenses=AGPL-3.0
+            org.opencontainers.image.source=https://github.com/TeleCrypt-io/flexisip-docker
+            org.opencontainers.image.vendor=TeleCrypt-io
+
+      - name: Build & push conference image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/conference/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
