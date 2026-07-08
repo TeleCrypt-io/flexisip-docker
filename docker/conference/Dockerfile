@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ninja-build \
     pkg-config \
+    python3 \
+    python3-pystache \
+    python3-six \
     wget \
     libssl-dev \
     libhiredis-dev \
