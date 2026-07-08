@@ -194,7 +194,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/flexisip-proxy
           tags: |
             type=raw,value=latest
-            type=raw,value=${FLEXISIP_VERSION}
+            type=raw,value=${{ env.FLEXISIP_VERSION }}
           labels: |
             org.opencontainers.image.title=flexisip-proxy
             org.opencontainers.image.description=SIP proxy (unofficial community build) for TeleCrypt-io
@@ -207,7 +207,7 @@ jobs:
         with:
           context: .
           file: docker/proxy/Dockerfile
-          build-args: FLEXISIP_VERSION=${FLEXISIP_VERSION}
+          build-args: FLEXISIP_VERSION=${{ env.FLEXISIP_VERSION }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -248,7 +248,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/flexisip-conference
           tags: |
             type=raw,value=latest
-            type=raw,value=${FLEXISIP_CONFERENCE_VERSION}
+            type=raw,value=${{ env.FLEXISIP_CONFERENCE_VERSION }}
           labels: |
             org.opencontainers.image.title=flexisip-conference
             org.opencontainers.image.description=Conference server (unofficial community build) for TeleCrypt-io, with EKT plugin for E2EE
@@ -261,7 +261,7 @@ jobs:
         with:
           context: .
           file: docker/conference/Dockerfile
-          build-args: FLEXISIP_CONFERENCE_VERSION=${FLEXISIP_CONFERENCE_VERSION}
+          build-args: FLEXISIP_CONFERENCE_VERSION=${{ env.FLEXISIP_CONFERENCE_VERSION }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
