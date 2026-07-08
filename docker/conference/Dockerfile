@@ -71,7 +71,8 @@ RUN cmake -G Ninja -B build \
         -DENABLE_G729=ON \
         -DENABLE_EKT_SERVER=ON \
  && cmake --build build \
- && cmake --install build --prefix /install
+ && cmake --install build --prefix /install \
+ && tar -C / -czf /install.tgz install
 
 # ---- runtime stage --------------------------------------------------------
 FROM ubuntu:24.04
@@ -112,8 +113,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
 # Bring in the built conference server (including the EKT plugin) from the
-# builder stage.
-COPY --from=builder /install /
+# builder stage via tar (avoids a buildkit cache-mount conflict on COPY).
+COPY --from=builder /install.tgz /tmp/install.tgz
+RUN tar -xzf /tmp/install.tgz -C / && rm /tmp/install.tgz
 
 VOLUME ["/etc/opt/belledonne-communications"]
 VOLUME ["/var/opt/belledonne-communications"]
