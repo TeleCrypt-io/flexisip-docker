@@ -1,0 +1,103 @@
+# flexisip.conf — example configuration for the Flexisip SIP proxy.
+# Copy to /etc/opt/belledonne-communications/flexisip/flexisip.conf and adjust.
+
+[global]
+# Public hostname clients connect to.
+# IMPORTANT: replace with your real DNS name.
+# host=sip.example.com
+
+# Comma-separated list of public IP addresses the proxy should advertise in SIP/SDP.
+# nat-addresses=1.2.3.4
+
+# Logging
+log-level=info
+user-agent=flexisip/2.6
+
+# Runtime directory
+runtime-dir=/var/run/flexisip
+
+# ------------------------------------------------------------------
+# Transports
+# ------------------------------------------------------------------
+[ Transports ]
+# TLS for SIP signaling. Required for E2EE-capable clients to authenticate
+# the server and to carry the secure signaling channel.
+# Certificate and key paths must be readable by the flexisip user.
+# See https://wiki.linphone.org/xwiki/wiki/public/view/Flexisip/Configuration/ for
+# detailed TLS options (cipher suites, client cert verification, etc.).
+# transport=tls://sip.example.com:5061
+# tls-certificates-file=/etc/flexisip/tls/agent.pem
+# tls-private-key=/etc/flexisip/tls/agent.key
+
+# ------------------------------------------------------------------
+# Registrar: stores user bindings (AOR → contact)
+# ------------------------------------------------------------------
+[module::Registrar]
+enabled=true
+# Redis is the simplest backend for a single-proxy deployment.
+# For multi-proxy deployments, point each proxy at the same Redis instance.
+db-implementation=redis
+redis-server-domain=127.0.0.1
+redis-server-port=6379
+# Optional authentication to Redis (uncomment if set)
+# redis-auth-password=changeme
+# redis-server-encryption=1
+# redis-trusted-ca-certs=/etc/ssl/certs/ca-certificates.crt
+
+# Contact registration parameters
+reg-on-response=true
+reg-on-register=true
+max-contacts-per-registration=5
+contact-parameters=enabled
+
+# ------------------------------------------------------------------
+# Authentication: digest auth for SIP users
+# ------------------------------------------------------------------
+[module::Authentication]
+enabled=true
+# Digest auth realm — typically the same as the SIP domain.
+auth-domain=sip.example.com
+# Disable the "+" trick used to push a call to all devices of a user
+# (re-enable for multi-device support).
+disable-qop-auth=false
+# Users are stored in a separate backend. The simplest is the
+# file-based "auth" backend; for larger deployments use a DB.
+# See https://wiki.linphone.org/xwiki/wiki/public/view/Flexisip/Configuration/Authentication/
+# auth-backend=file
+# file-path=/etc/flexisip/users.conf
+
+# ------------------------------------------------------------------
+# Presence: required by the conference server to discover participant devices
+# ------------------------------------------------------------------
+# [module::Presence]
+# enabled=true
+
+# ------------------------------------------------------------------
+# Forward / routing
+# ------------------------------------------------------------------
+[module::Forward]
+enabled=true
+# Conference-factory URI must be routed to the local conference server.
+# Conference focus URIs are dynamically created and routed automatically.
+# route-to-voicemail=...
+
+[module::Router]
+# The conference factory URI: requests to <sip:conference-factory@<domain>>
+# are forwarded to the conference server's transport.
+# conference-factory-uri=sip:conference-factory@sip.example.com
+
+# ------------------------------------------------------------------
+# Media relays (Relay / DoS protection) — usually off for small deployments
+# ------------------------------------------------------------------
+# [module::MediaRelay]
+# enabled=false
+
+# ------------------------------------------------------------------
+# Firewall / port policy
+# ------------------------------------------------------------------
+# Internal: do not block 127.0.0.1 connections (the conference server runs
+# on the same host and connects on localhost).
+[FirewallPolicy]
+# Allow the conference server to reach the proxy.
+# (default policy is "decline" on production builds)
+# internal-hosts=127.0.0.1

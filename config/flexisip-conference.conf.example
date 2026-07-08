@@ -1,0 +1,67 @@
+# flexisip-conference.conf — example configuration for the Flexisip conference server.
+# Copy to /etc/opt/belledonne-communications/flexisip-conference/flexisip-conference.conf
+# and adjust.
+#
+# When ENABLE_EKT_SERVER=true is set on the container, the entrypoint appends an
+# E2EE block to the [conference-server] section (audio-engine-mode=sfu,
+# video-engine-mode=sfu, encryption=zrtp). It only appends if these keys are
+# absent. If you set them here, the entrypoint leaves them alone — so the cleanest
+# way to run E2EE is to either set them here explicitly or rely on the entrypoint.
+
+[global]
+# Domain this conference server belongs to. Must match the proxy's host/domain.
+# host=sip.example.com
+# Logging
+log-level=info
+
+# ------------------------------------------------------------------
+# Conference server
+# ------------------------------------------------------------------
+[conference-server]
+# The conference server listens on localhost since it talks to the local proxy.
+transport=sip:127.0.0.1:6064;transport=tcp
+
+# Comma-separated list of factory URIs clients use to create new conferences.
+# This implicitly defines the SIP domains managed by the conference server.
+conference-factory-uris=sip:conference-factory@sip.example.com
+
+# Template focus URIs used when conferences are created via the factory.
+# A 'conf-id' URI parameter is appended at runtime to make each focus unique.
+conference-focus-uris=sip:conference-focus@sip.example.com
+
+# Address of the proxy to send requests through.
+outbound-proxy=sip:127.0.0.1:5060;transport=tcp
+
+# Media types offered in conferences.
+supported-media-types=audio video text
+
+# ----- Engine mode ----------------------------------------------------
+# audio-engine-mode=video-engine-mode=encryption are the E2EE-relevant keys.
+# The entrypoint injects the E2EE block (sfu/sfu/zrtp) automatically when
+# ENABLE_EKT_SERVER=true is set. To make E2EE the default for this image,
+# uncomment the three lines below instead.
+# audio-engine-mode=sfu
+# video-engine-mode=sfu
+# encryption=zrtp
+# ----------------------------------------------------------------------
+
+# Database: MariaDB/MySQL for chatroom and conference state.
+# The schema is created automatically if the database is empty.
+database-backend=mysql
+database-connection-string=db='flexisip_conference' user='flexisip_conference' password='CHANGEME' host='mariadb'
+
+# Registrar backend: the conference server queries the proxy's registrar
+# to discover participant devices. Must use Redis in single-proxy deployments.
+[module::Registrar]
+db-implementation=redis
+redis-server-domain=127.0.0.1
+redis-server-port=6379
+# redis-auth-password=CHANGEME
+# redis-server-encryption=1
+# redis-trusted-ca-certs=/etc/ssl/certs/ca-certificates.crt
+
+# ----- Misc ------------------------------------------------------------
+enable-one-to-one-chat-room=true
+# Capability check: ensure clients indicate +org.linphone.specs contact parameter
+# before they are invited. Leave enabled for the official Linphone clients.
+check-capabilities=true
