@@ -1,0 +1,138 @@
+name: auto-bump
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Every night at 03:00 UTC.
+    - cron: '0 3 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  detect-and-update:
+    name: detect new upstream versions and update versions.env
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout meta-repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read current versions and state
+        id: current
+        run: |
+          set -euo pipefail
+          . ./versions.env
+          {
+            echo "flexisip=${FLEXISIP_VERSION}"
+            echo "conference=${FLEXISIP_CONFERENCE_VERSION}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Current versions.env: flexisip=${FLEXISIP_VERSION} conference=${FLEXISIP_CONFERENCE_VERSION}"
+          echo "Current state/built.json:"
+          cat state/built.json || true
+          echo
+
+      - name: Query GitLab for latest stable flexisip tag
+        id: latest-flexisip
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if response=$(curl -fsSL --connect-timeout 15 \
+                "https://gitlab.linphone.org/api/v4/projects/BC%2Fpublic%2Fflexisip/repository/tags?per_page=20"); then
+              break
+            fi
+            echo "GitLab API call failed (attempt $attempt); retrying in 5s"
+            sleep 5
+          done
+          if [[ -z "${response:-}" ]]; then
+            echo "ERROR: failed to reach GitLab API for flexisip tags" >&2
+            exit 1
+          fi
+          # Pick the first tag that is NOT alpha/beta/rc. GitLab returns newest first.
+          latest=$(echo "$response" | jq -r '[.[] | select(.name | test("-(alpha|beta|rc|dev|pre)") | not)][0].name // empty')
+          if [[ -z "$latest" ]]; then
+            echo "ERROR: no stable flexisip tag found" >&2
+            exit 1
+          fi
+          echo "Latest stable flexisip tag: $latest"
+          echo "tag=$latest" >> "$GITHUB_OUTPUT"
+
+      - name: Query GitLab for latest stable flexisip-conference tag
+        id: latest-conference
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if response=$(curl -fsSL --connect-timeout 15 \
+                "https://gitlab.linphone.org/api/v4/projects/BC%2Fpublic%2Fflexisip-conference/repository/tags?per_page=20"); then
+              break
+            fi
+            echo "GitLab API call failed (attempt $attempt); retrying in 5s"
+            sleep 5
+          done
+          if [[ -z "${response:-}" ]]; then
+            echo "ERROR: failed to reach GitLab API for flexisip-conference tags" >&2
+            exit 1
+          fi
+          latest=$(echo "$response" | jq -r '[.[] | select(.name | test("-(alpha|beta|rc|dev|pre)") | not)][0].name // empty')
+          if [[ -z "$latest" ]]; then
+            echo "ERROR: no stable flexisip-conference tag found" >&2
+            exit 1
+          fi
+          echo "Latest stable flexisip-conference tag: $latest"
+          echo "tag=$latest" >> "$GITHUB_OUTPUT"
+
+      - name: Decide whether to update versions.env
+        id: decide
+        env:
+          CUR_FLEXISIP=${{ steps.current.outputs.flexisip }}
+          CUR_CONFERENCE=${{ steps.current.outputs.conference }}
+          LATEST_FLEXISIP=${{ steps.latest-flexisip.outputs.tag }}
+          LATEST_CONFERENCE=${{ steps.latest-conference.outputs.tag }}
+        run: |
+          set -euo pipefail
+          built_flexisip=$(jq -r '.flexisip // ""' state/built.json)
+          built_conference=$(jq -r '."flexisip-conference" // ""' state/built.json)
+
+          update_flexisip=""
+          update_conference=""
+
+          if [[ -n "$LATEST_FLEXISIP" && "$LATEST_FLEXISIP" != "$CUR_FLEXISIP" && "$LATEST_FLEXISIP" != "$built_flexisip" ]]; then
+            update_flexisip="$LATEST_FLEXISIP"
+          fi
+          if [[ -n "$LATEST_CONFERENCE" && "$LATEST_CONFERENCE" != "$CUR_CONFERENCE" && "$LATEST_CONFERENCE" != "$built_conference" ]]; then
+            update_conference="$LATEST_CONFERENCE"
+          fi
+
+          {
+            echo "update_flexisip=${update_flexisip}"
+            echo "update_conference=${update_conference}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Decision:"
+          echo "  flexisip:        current=$CUR_FLEXISIP  built=$built_flexisip  latest=$LATEST_FLEXISIP  -> ${update_flexisip:-no-change}"
+          echo "  flexisip-conference: current=$CUR_CONFERENCE built=$built_conference latest=$LATEST_CONFERENCE -> ${update_conference:-no-change}"
+
+      - name: Update versions.env
+        if: steps.decide.outputs.update_flexisip != '' || steps.decide.outputs.update_conference != ''
+        run: |
+          set -euo pipefail
+          new_flexisip="${{ steps.decide.outputs.update_flexisip }}"
+          new_conference="${{ steps.decide.outputs.update_conference }}"
+          cur_flexisip="${{ steps.current.outputs.flexisip }}"
+          cur_conference="${{ steps.current.outputs.conference }}"
+
+          {
+            echo "FLEXISIP_VERSION=${new_flexisip:-$cur_flexisip}"
+            echo "FLEXISIP_CONFERENCE_VERSION=${new_conference:-$cur_conference}"
+          } > versions.env
+
+          echo "New versions.env:"
+          cat versions.env
+
+      - name: Commit versions.env (triggers build workflow)
+        if: steps.decide.outputs.update_flexisip != '' || steps.decide.outputs.update_conference != ''
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "bump: flexisip=${{ steps.decide.outputs.update_flexisip || steps.current.outputs.flexisip }} flexisip-conference=${{ steps.decide.outputs.update_conference || steps.current.outputs.conference }}"
+          file_pattern: versions.env
