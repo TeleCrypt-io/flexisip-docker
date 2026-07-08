@@ -13,12 +13,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ccache \
     cmake \
+    doxygen \
+    elfutils \
     git \
     ninja-build \
     pkg-config \
     python3 \
     python3-pystache \
     python3-six \
+    yasm \
     wget \
     libssl-dev \
     libhiredis-dev \
