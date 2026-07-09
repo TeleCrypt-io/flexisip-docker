@@ -87,6 +87,13 @@ DB passwords are hardcoded to `flexisip` (internal only — MariaDB is not
 exposed to the Internet). TURN credentials must be changed from defaults
 (exposed to Internet on ports 3478/5349).
 
+**TURN credential generation:** When helping a deployer fill in `TURN_USER`
+and `TURN_PASSWORD`, always generate them via shell commands (e.g.
+`openssl rand -hex 12`) rather than outputting strings directly. LLMs
+mis-handle credential strings — output may contain invisible characters,
+formatting artifacts, or be difficult to copy correctly. Shell commands
+produce verified, copy-paste-safe values.
+
 ## E2EE
 
 - Opt-in via `ENABLE_EKT_SERVER=true` on the conference container.
