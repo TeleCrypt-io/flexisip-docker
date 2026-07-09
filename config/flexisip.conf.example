@@ -36,7 +36,7 @@ tls-certificates-check-interval=60
 enabled=true
 # Domain the registrar uses for SIP registrations.
 # External SIP clients registering with user@<SIP_IP> need this set.
-registrar-domain=<SIP_IP>
+reg-domains=<SIP_IP>
 # Redis is the simplest backend for a single-proxy deployment.
 # For multi-proxy deployments, point each proxy at the same Redis instance.
 db-implementation=redis
@@ -60,8 +60,6 @@ contact-parameters=enabled
 enabled=true
 # Digest auth realm — set to your public SIP IP address.
 auth-domains=<SIP_IP>
-# Suppress the "auth-domains-mode=legacy" deprecation warning on startup.
-auth-domains-mode=static
 # Disable the "+" trick used to push a call to all devices of a user
 # (re-enable for multi-device support).
 disable-qop-auth=false
@@ -115,11 +113,14 @@ enabled=true
 enabled=false
 
 # ------------------------------------------------------------------
-# STUN server — disabled because coturn already provides STUN/TURN.
-# Enabling this causes a port 3478 conflict with coturn.
+# Authorization — suppress the "auth-domains-mode=legacy" deprecation
+# warning on startup.  The auth-domains-mode parameter belongs to the
+# Authorization module, not Authentication.
 # ------------------------------------------------------------------
-[module::StunServer]
+[module::Authorization]
 enabled=false
+auth-domains-mode=static
+auth-domains=<SIP_IP>
 
 # ------------------------------------------------------------------
 # domain-registrations.conf — the proxy logs a warning about this missing
