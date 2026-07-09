@@ -68,7 +68,7 @@ permissions are `contents: read`). Do not remove this.
 
 ## ACME / TLS automation
 
-- ACME sidecar (`goacme/lego:v4.31.0`) fetches Let's Encrypt IP certificates
+- ACME sidecar (`goacme/lego:v5.3.0`) fetches Let's Encrypt IP certificates
   via HTTP-01 challenge.
 - **Port 80/tcp must be reachable** from the Internet on `SIP_IP`.
 - Let's Encrypt IP certs are short-lived (~6 days), renewed automatically.
@@ -131,6 +131,13 @@ Smoke test (`build.yml` job 4) checks:
   `/opt/belledonne-communications/flexisip-conference/lib/liblinphone/plugins/`
 
 No unit tests. Verification is manual against a running deployment.
+
+## Known issues
+
+- **auth-domains-mode=legacy warning:** The conference image's bundled config
+  or upstream defaults may emit `auth-domains-mode=legacy` deprecation warning
+  at startup. This is harmless — the warning comes from upstream Flexisip v2.6
+  defaults, not from our config files. Safe to ignore.
 
 ## Handover docs
 

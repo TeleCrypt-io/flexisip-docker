@@ -3,7 +3,7 @@ set -euo pipefail
 
 EKT_ENABLED="${ENABLE_EKT_SERVER:-false}"
 
-PLUGIN_PATH="/opt/belledonne-communications/flexisip-conference/lib/liblinphone/plugins/linphone_ektserver.so"
+PLUGIN_PATH="/opt/belledonne-communications/flexisip-conference/lib/liblinphone/plugins/liblinphone_ektserver.so"
 CONFIG_PATH="/etc/opt/belledonne-communications/flexisip-conference/flexisip-conference.conf"
 
 # --- Plugin presence check (always) ----------------------------------------

@@ -1,4 +1,4 @@
-# flexisip.conf — example configuration for the Flexisip SIP proxy.
+# flexisip.conf — example configuration for the Flexisip SIP proxy (v2.6+).
 # Copy to /etc/opt/belledonne-communications/flexisip/flexisip.conf and adjust.
 #
 # The ACME sidecar (lego) writes cert.pem + privkey.pem into
@@ -20,19 +20,14 @@ user-agent=flexisip/2.6
 # Runtime directory
 runtime-dir=/var/run/flexisip
 
-# ------------------------------------------------------------------
-# Transports
-# ------------------------------------------------------------------
-[ Transports ]
-# TLS for SIP signaling. Required for E2EE-capable clients to authenticate
-# the server and to carry the secure signaling channel.
+# TLS transport.  The sips: scheme is required for TLS (not transport=tls).
 # Certificate and key paths are populated by the ACME sidecar container
 # via the flexisip_certs Docker volume (mounted at /etc/flexisip/tls).
 # The proxy auto-reloads every 60 seconds, so renewed certs take effect
 # without a restart.
-transport=tls://<SIP_IP>:5061
+transports=sips:0.0.0.0:5061
 tls-certificates-file=/etc/flexisip/tls/cert.pem
-tls-private-key=/etc/flexisip/tls/privkey.pem
+tls-certificates-private-key=/etc/flexisip/tls/privkey.pem
 tls-certificates-check-interval=60
 
 # ------------------------------------------------------------------
@@ -66,11 +61,10 @@ auth-domain=<SIP_IP>
 # Disable the "+" trick used to push a call to all devices of a user
 # (re-enable for multi-device support).
 disable-qop-auth=false
-# Users are stored in a separate backend. The simplest is the
-# file-based "auth" backend; for larger deployments use a DB.
+# Users are stored in a file-based backend.
 # See https://wiki.linphone.org/xwiki/wiki/public/view/Flexisip/Configuration/Authentication/
-# auth-backend=file
-# file-path=/etc/flexisip/users.conf
+db-implementation=file
+file-path=/etc/flexisip/users.conf
 
 # ------------------------------------------------------------------
 # Presence: required by the conference server to discover participant devices

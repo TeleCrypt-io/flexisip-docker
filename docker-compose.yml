@@ -21,17 +21,15 @@ services:
   # ACME sidecar — fetches and renews an IP-address TLS certificate from
   # Let's Encrypt via HTTP-01 challenge.  Writes cert.pem + privkey.pem
   # into the shared flexisip_certs volume.  The proxy reads them and
-  # auto-reloads every 1 minute (tls-certificates-check-interval=1m).
+  # auto-reloads every 1 minute (tls-certificates-check-interval=60).
   #
   # Let's Encrypt IP certs:
-  #   - Short-lived (~6 days), renewed every ~5 days
-  #   - Requires --profile shortlived (ACME directory metadata)
-  #   - Only HTTP-01 or TLS-ALPN-01 challenges (no DNS-01)
-  #   - --disable-cn to avoid CN error with IP certs
+  #   - Short-lived (~6 days), renewed automatically by lego run
+  #   - Only HTTP-01 challenge (no DNS-01 for IP certs)
   #   - Port 80 must be reachable from the Internet
   # ---------------------------------------------------------------------------
   acme:
-    image: goacme/lego:v4.31.0
+    image: goacme/lego:v5.3.0
     container_name: flexisip-acme
     restart: unless-stopped
     network_mode: host
@@ -47,14 +45,12 @@ services:
         # ── Initial certificate request ──────────────────────────────────
         fetch_cert() {
           echo "==> Requesting IP certificate for $$IP ..."
-          lego \
-            --http --http-port 80 \
+          lego run \
             --accept-tos \
-            --server https://acme-v02.api.letsencrypt.org/directory \
-            --disable-cname \
+            --http \
+            --http.address ":80" \
             --path "$$DIR" \
-            --domains "$$IP" \
-            run
+            --domains "$$IP"
 
           # Copy into the shared volume for the proxy to pick up
           cp "$$DIR/certificates/$$IP.crt"  "$$CERT_DIR/cert.pem"
@@ -65,14 +61,12 @@ services:
         # ── Renewal loop ─────────────────────────────────────────────────
         renew_cert() {
           echo "==> Attempting renewal for $$IP ..."
-          lego \
-            --http --http-port 80 \
+          lego run \
             --accept-tos \
-            --server https://acme-v02.api.letsencrypt.org/directory \
-            --disable-cname \
+            --http \
+            --http.address ":80" \
             --path "$$DIR" \
-            --domains "$$IP" \
-            renew --days 3 && {
+            --domains "$$IP" && {
             cp "$$DIR/certificates/$$IP.crt"  "$$CERT_DIR/cert.pem"
             cp "$$DIR/certificates/$$IP.key"  "$$CERT_DIR/privkey.pem"
             echo "==> Renewed and installed new certificate"
@@ -132,7 +126,7 @@ services:
       # the conference server in SFU mode with ZRTP media encryption.
       - ENABLE_EKT_SERVER=${ENABLE_EKT_SERVER:-false}
     volumes:
-      - ./config/flexisip-conference.conf:/etc/opt/belledonne-communications/flexisip-conference/flexisip-conference.conf:ro
+      - ./config/flexisip-conference.conf:/etc/opt/belledonne-communications/flexisip-conference/flexisip-conference.conf
       - conference_data:/var/opt/belledonne-communications
     depends_on:
       mariadb:

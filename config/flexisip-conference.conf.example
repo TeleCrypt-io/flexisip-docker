@@ -30,7 +30,7 @@ conference-factory-uris=sip:conference-factory@<SIP_IP>
 conference-focus-uris=sip:conference-focus@<SIP_IP>
 
 # Address of the proxy to send requests through.
-outbound-proxy=sip:127.0.0.1:5060;transport=tcp
+outbound-proxy=sip:host.docker.internal:5060;transport=tcp
 
 # Media types offered in conferences.
 supported-media-types=audio video text
