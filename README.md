@@ -88,8 +88,13 @@ These three lines switch the conference to **SFU mode** (server only forwards
 RTP packets and rewrites headers, no decode/encode), which is what makes E2EE
 possible. The EKT plugin (always installed) distributes encryption keys.
 
-See `SECURITY.md` for the E2EE verification checklist and the client-side
-indicators.
+**EKT plugin license:** The EKT server plugin is provided by **Belledonne
+Communications** under the terms described in the upstream
+`ENABLE_EKT_SERVER` CMake option. For customers under a proprietary license,
+this functionality requires a specific license from Belledonne Communications.
+For AGPLv3 self-hosting (which this repository is built for), the plugin is
+freely usable. See `NOTICE` for the full attribution and `SECURITY.md` for
+verification steps.
 
 ## Quick start
 
