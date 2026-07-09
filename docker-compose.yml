@@ -1,35 +1,132 @@
-# docker-compose.yml — example layout for a small self-hosted E2EE-capable
-# Flexisip deployment.
+# docker-compose.yml — self-hosted E2EE-capable Flexisip deployment
+# with automatic Let's Encrypt IP-certificate provisioning via lego.
 #
 # Adjust:
-#   - SIP_DOMAIN: your real DNS name
-#   - TLS_CERT_DIR: path to your Let's Encrypt or other TLS cert (read-only mount)
+#   - SIP_IP: public IP address of this host (used for TLS + ACME)
+#   - LETSENCRYPT_EMAIL: contact email for Let's Encrypt account
 #   - DB passwords: rotate the placeholders
 #   - TURN_PUBLIC_IP: the public IP of the host running coturn
 #
+# Port requirements:
+#   - Port 80/tcp must be reachable from the Internet on SIP_IP
+#     (used by Let's Encrypt HTTP-01 challenge)
+#   - Port 5061/tcp+udp for SIP TLS signaling (host network)
+#
 # First run:
+#   cp .env.example .env   # then edit .env
 #   docker compose up -d
-#   docker compose logs -f proxy conference
+#   docker compose logs -f acme proxy conference
 
 services:
+  # ---------------------------------------------------------------------------
+  # ACME sidecar — fetches and renews an IP-address TLS certificate from
+  # Let's Encrypt via HTTP-01 challenge.  Writes cert.pem + privkey.pem
+  # into the shared flexisip_certs volume.  The proxy reads them and
+  # auto-reloads every 1 minute (tls-certificates-check-interval=1m).
+  #
+  # Let's Encrypt IP certs:
+  #   - Short-lived (~6 days), renewed every ~5 days
+  #   - Requires --profile shortlived (ACME directory metadata)
+  #   - Only HTTP-01 or TLS-ALPN-01 challenges (no DNS-01)
+  #   - --disable-cn to avoid CN error with IP certs
+  #   - Port 80 must be reachable from the Internet
+  # ---------------------------------------------------------------------------
+  acme:
+    image: goacme/lego:v4.31.0
+    container_name: flexisip-acme
+    restart: unless-stopped
+    network_mode: host
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        set -e
+        EMAIL="$${LETSENCRYPT_EMAIL:?LETSENCRYPT_EMAIL is required}"
+        IP="$${SIP_IP:?SIP_IP is required}"
+        DIR=/etc/lego
+        CERT_DIR=/certs
+
+        # ── Initial certificate request ──────────────────────────────────
+        fetch_cert() {
+          echo "==> Requesting IP certificate for $$IP ..."
+          lego \
+            --email "$$EMAIL" \
+            --http --http-port 80 \
+            --accept-tos \
+            --server https://acme-v02.api.letsencrypt.org/directory \
+            --disable-cname \
+            --path "$$DIR" \
+            --domains "$$IP" \
+            run
+
+          # Copy into the shared volume for the proxy to pick up
+          cp "$$DIR/certificates/$$IP.crt"  "$$CERT_DIR/cert.pem"
+          cp "$$DIR/certificates/$$IP.key"  "$$CERT_DIR/privkey.pem"
+          echo "==> Certificate installed into $$CERT_DIR"
+        }
+
+        # ── Renewal loop ─────────────────────────────────────────────────
+        renew_cert() {
+          echo "==> Attempting renewal for $$IP ..."
+          lego \
+            --email "$$EMAIL" \
+            --http --http-port 80 \
+            --accept-tos \
+            --server https://acme-v02.api.letsencrypt.org/directory \
+            --disable-cname \
+            --path "$$DIR" \
+            --domains "$$IP" \
+            renew --days 3 && {
+            cp "$$DIR/certificates/$$IP.crt"  "$$CERT_DIR/cert.pem"
+            cp "$$DIR/certificates/$$IP.key"  "$$CERT_DIR/privkey.pem"
+            echo "==> Renewed and installed new certificate"
+          } || echo "==> Renewal not yet due, continuing"
+        }
+
+        # First run
+        fetch_cert || true
+
+        # Continuous renewal loop (every 12 hours, check if renewal needed)
+        while true; do
+          sleep 43200
+          renew_cert || true
+        done
+    environment:
+      - SIP_IP=${SIP_IP:?Set SIP_IP in .env}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL:?Set LETSENCRYPT_EMAIL in .env}
+    volumes:
+      - flexisip_certs:/certs
+    healthcheck:
+      test: ["CMD", "test", "-f", "/certs/cert.pem"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+  # ---------------------------------------------------------------------------
+  # SIP Proxy
+  # ---------------------------------------------------------------------------
   proxy:
     image: ghcr.io/telecrypt-io/flexisip-proxy:latest
     container_name: flexisip-proxy
     restart: unless-stopped
     network_mode: host
     environment:
-      - SIP_DOMAIN=${SIP_DOMAIN:-sip.example.com}
+      - SIP_IP=${SIP_IP:-203.0.113.10}
     volumes:
-      - ${TLS_CERT_DIR:-./certs}:/etc/flexisip/tls:ro
+      - flexisip_certs:/etc/flexisip/tls:ro
       - ./config/flexisip.conf:/etc/opt/belledonne-communications/flexisip/flexisip.conf:ro
       - proxy_data:/var/opt/belledonne-communications
-    # The proxy needs host network so it owns the public SIP TLS port (5061).
-    # If you cannot use host network, expose 5061/tcp + 5061/udp instead and
+    depends_on:
+      acme:
+        condition: service_healthy
+    # Host network so the proxy owns the public SIP TLS port (5061).
+    # If you cannot use host networking, expose 5061/tcp+udp instead and
     # set the global "nat-addresses" to the host's public IP.
-    # ports:
-    #   - "5061:5061/tcp"
-    #   - "5061:5061/udp"
 
+  # ---------------------------------------------------------------------------
+  # Conference server
+  # ---------------------------------------------------------------------------
   conference:
     image: ghcr.io/telecrypt-io/flexisip-conference:latest
     container_name: flexisip-conference
@@ -47,14 +144,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    # No external ports; the conference server talks to the proxy on
-    # localhost:6064 inside the proxy container (since the proxy uses host network,
-    # the conference reaches it through the host's 127.0.0.1:5060 outbound-proxy).
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # If you change this to bridge networking, update flexisip-conference.conf
-    # to use the proxy's service name as the outbound-proxy host.
 
+  # ---------------------------------------------------------------------------
+  # MariaDB — chatroom and conference state
+  # ---------------------------------------------------------------------------
   mariadb:
     image: mariadb:11.4
     container_name: flexisip-mariadb
@@ -72,6 +167,9 @@ services:
       timeout: 5s
       retries: 5
 
+  # ---------------------------------------------------------------------------
+  # Redis — registrar backend for the proxy
+  # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: flexisip-redis
@@ -85,6 +183,9 @@ services:
       timeout: 3s
       retries: 5
 
+  # ---------------------------------------------------------------------------
+  # coturn — TURN/STUN relay for NAT traversal
+  # ---------------------------------------------------------------------------
   coturn:
     image: coturn/coturn:4.6
     container_name: flexisip-coturn
@@ -112,3 +213,4 @@ volumes:
   redis_data:
   proxy_data:
   conference_data:
+  flexisip_certs:

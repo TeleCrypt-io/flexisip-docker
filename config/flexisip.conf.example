@@ -1,13 +1,17 @@
 # flexisip.conf — example configuration for the Flexisip SIP proxy.
 # Copy to /etc/opt/belledonne-communications/flexisip/flexisip.conf and adjust.
+#
+# The ACME sidecar (lego) writes cert.pem + privkey.pem into
+# /etc/flexisip/tls/ via the shared Docker volume.  The proxy auto-reloads
+# certificates every 60 seconds (tls-certificates-check-interval=60).
 
 [global]
-# Public hostname clients connect to.
-# IMPORTANT: replace with your real DNS name.
-# host=sip.example.com
+# Public IP address clients connect to.
+# IMPORTANT: replace with your server's public IP.
+# host=<SIP_IP>
 
 # Comma-separated list of public IP addresses the proxy should advertise in SIP/SDP.
-# nat-addresses=1.2.3.4
+# nat-addresses=<SIP_IP>
 
 # Logging
 log-level=info
@@ -22,12 +26,14 @@ runtime-dir=/var/run/flexisip
 [ Transports ]
 # TLS for SIP signaling. Required for E2EE-capable clients to authenticate
 # the server and to carry the secure signaling channel.
-# Certificate and key paths must be readable by the flexisip user.
-# See https://wiki.linphone.org/xwiki/wiki/public/view/Flexisip/Configuration/ for
-# detailed TLS options (cipher suites, client cert verification, etc.).
-# transport=tls://sip.example.com:5061
-# tls-certificates-file=/etc/flexisip/tls/agent.pem
-# tls-private-key=/etc/flexisip/tls/agent.key
+# Certificate and key paths are populated by the ACME sidecar container
+# via the flexisip_certs Docker volume (mounted at /etc/flexisip/tls).
+# The proxy auto-reloads every 60 seconds, so renewed certs take effect
+# without a restart.
+transport=tls://<SIP_IP>:5061
+tls-certificates-file=/etc/flexisip/tls/cert.pem
+tls-private-key=/etc/flexisip/tls/privkey.pem
+tls-certificates-check-interval=60
 
 # ------------------------------------------------------------------
 # Registrar: stores user bindings (AOR → contact)
@@ -55,8 +61,8 @@ contact-parameters=enabled
 # ------------------------------------------------------------------
 [module::Authentication]
 enabled=true
-# Digest auth realm — typically the same as the SIP domain.
-auth-domain=sip.example.com
+# Digest auth realm — set to your public SIP IP address.
+auth-domain=<SIP_IP>
 # Disable the "+" trick used to push a call to all devices of a user
 # (re-enable for multi-device support).
 disable-qop-auth=false
@@ -84,7 +90,7 @@ enabled=true
 [module::Router]
 # The conference factory URI: requests to <sip:conference-factory@<domain>>
 # are forwarded to the conference server's transport.
-# conference-factory-uri=sip:conference-factory@sip.example.com
+# conference-factory-uri=sip:conference-factory@<SIP_IP>
 
 # ------------------------------------------------------------------
 # Media relays (Relay / DoS protection) — usually off for small deployments

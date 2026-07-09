@@ -40,6 +40,33 @@ Two Docker images:
 Both images are based on `ubuntu:24.04` and install the Belledonne `.deb`
 packages built from upstream source by this repository's CI.
 
+## Automatic TLS via Let's Encrypt IP certificates
+
+The deployment includes an **ACME sidecar** (`goacme/lego`) that automatically
+fetches and renews a Let's Encrypt **IP-address TLS certificate** using the
+HTTP-01 challenge.
+
+**How it works:**
+
+1. The `acme` container starts and requests a certificate for your public IP
+   from Let's Encrypt via HTTP-01 (port 80).
+2. The certificate (`cert.pem`) and private key (`privkey.pem`) are written
+   into a shared Docker volume (`flexisip_certs`).
+3. The `proxy` container mounts this volume at `/etc/flexisip/tls/` (read-only)
+   and auto-reloads the certificates every 60 seconds.
+4. The ACME container runs a renewal loop every 12 hours, checking if renewal
+   is needed (certs are renewed when <3 days remain).
+
+**Requirements:**
+
+- **Port 80/tcp** must be reachable from the Internet on your `SIP_IP`
+  (HTTP-01 challenge validation).
+- Let's Encrypt issues IP certs as **short-lived certificates** (~6 days).
+  Renewal is fully automatic — no manual intervention needed.
+
+**No DNS required.** This solution uses IP-address certificates, so you don't
+need a domain name or DNS API access.
+
 ## End-to-end encryption (opt-in)
 
 E2EE conferences are **not** the default. The conference server's default
@@ -72,22 +99,24 @@ git clone https://github.com/TeleCrypt-io/flexisip-docker.git
 cd flexisip-docker
 
 # 2. Create your config from the examples
-mkdir -p config certs
+mkdir -p config
 cp config/flexisip.conf.example config/flexisip.conf
 cp config/flexisip-conference.conf.example config/flexisip-conference.conf
-# Edit both files: set SIP_DOMAIN, change DB password, point TLS certs to ./certs
+# Edit both files: replace <SIP_IP> with your server's public IP
 
-# 3. Place your TLS cert and key in ./certs/agent.pem and ./certs/agent.key
-
-# 4. Create your .env from the example
+# 3. Create your .env from the example
 cp .env.example .env
-# Edit .env: set SIP_DOMAIN, TURN_PUBLIC_IP, rotate passwords
+# Edit .env: set SIP_IP, LETSENCRYPT_EMAIL, rotate DB passwords
 
-# 5. Pull and start
+# 4. Pull and start (port 80 must be reachable for ACME challenge)
 docker compose pull
 docker compose up -d
-docker compose logs -f proxy conference
+docker compose logs -f acme proxy conference
 ```
+
+The ACME sidecar will automatically obtain a TLS certificate on first start.
+The proxy will begin serving SIP over TLS once the certificate is available
+(usually within 30-60 seconds).
 
 For E2EE:
 

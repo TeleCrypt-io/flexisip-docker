@@ -13,6 +13,13 @@ ccache/
 .env
 .env.local
 
+# User config (copy from *.example, never commit real configs)
+config/flexisip.conf
+config/flexisip-conference.conf
+
+# TLS certificates
+certs/
+
 # IDE
 .vscode/
 .idea/

@@ -23,11 +23,11 @@ transport=sip:127.0.0.1:6064;transport=tcp
 
 # Comma-separated list of factory URIs clients use to create new conferences.
 # This implicitly defines the SIP domains managed by the conference server.
-conference-factory-uris=sip:conference-factory@sip.example.com
+conference-factory-uris=sip:conference-factory@<SIP_IP>
 
 # Template focus URIs used when conferences are created via the factory.
 # A 'conf-id' URI parameter is appended at runtime to make each focus unique.
-conference-focus-uris=sip:conference-focus@sip.example.com
+conference-focus-uris=sip:conference-focus@<SIP_IP>
 
 # Address of the proxy to send requests through.
 outbound-proxy=sip:127.0.0.1:5060;transport=tcp
