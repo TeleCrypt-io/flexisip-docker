@@ -139,6 +139,12 @@ No unit tests. Verification is manual against a running deployment.
   at startup. This is harmless — the warning comes from upstream Flexisip v2.6
   defaults, not from our config files. Safe to ignore.
 
+- **DoSProtection disabled:** The `[module::DoSProtection]` section in
+  `config/flexisip.conf.example` sets `enabled=false` because the module
+  requires iptables, which is not available (or desirable) inside Docker
+  containers. For production DoS protection, use external mechanisms (cloud
+  firewalls, fail2ban, etc.).
+
 ## Handover docs
 
 `handover/` directory contains additional context:

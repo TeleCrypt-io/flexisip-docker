@@ -114,7 +114,6 @@ LABEL org.opencontainers.image.documentation="https://github.com/TeleCrypt-io/fl
 # where the upstream .deb's Depends declares them.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    iptables \
     libsystemd0 \
     libssl3t64 \
     libboost-system1.83.0 \

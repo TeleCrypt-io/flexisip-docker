@@ -93,6 +93,14 @@ enabled=true
 # enabled=false
 
 # ------------------------------------------------------------------
+# DoS protection — disabled in Docker (iptables not available in containers).
+# For production deployments, use external DoS protection (cloud firewall,
+# fail2ban, etc.) instead of the in-container iptables-based module.
+# ------------------------------------------------------------------
+[module::DoSProtection]
+enabled=false
+
+# ------------------------------------------------------------------
 # Firewall / port policy
 # ------------------------------------------------------------------
 # Internal: do not block 127.0.0.1 connections (the conference server runs
