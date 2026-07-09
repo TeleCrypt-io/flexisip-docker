@@ -56,7 +56,7 @@ contact-parameters=enabled
 [module::Authentication]
 enabled=true
 # Digest auth realm — set to your public SIP IP address.
-auth-domain=<SIP_IP>
+auth-domains=<SIP_IP>
 # Disable the "+" trick used to push a call to all devices of a user
 # (re-enable for multi-device support).
 disable-qop-auth=false
