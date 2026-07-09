@@ -9,13 +9,8 @@ work/
 *.tar.bz2
 ccache/
 
-# Local environment
-.env
+# Local environment — real overrides, never committed
 .env.local
-
-# User config (copy from *.example, never commit real configs)
-config/flexisip.conf
-config/flexisip-conference.conf
 
 # TLS certificates
 certs/

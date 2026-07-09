@@ -19,7 +19,7 @@ packages are published to GitHub Releases (not consumed by Docker).
 - `docker/**`
 - `.github/workflows/build.yml`
 
-**Config/docs changes (README, .env.example, docker-compose.yml, config/*.conf.example)
+**Config/docs changes (README, .env, docker-compose.yml, config/*.conf)
 silently skip CI.** This is intentional — Dockerfiles are unchanged.
 
 `.github/workflows/auto-bump.yml` runs nightly (03:00 UTC), detects new upstream
@@ -109,9 +109,9 @@ produce verified, copy-paste-safe values.
 | File | Purpose |
 |---|---|
 | `docker-compose.yml` | Deployment layout (proxy, conference, acme, mariadb, redis, coturn) |
-| `config/flexisip.conf.example` | Proxy config template |
-| `config/flexisip-conference.conf.example` | Conference config template |
-| `.env.example` | Environment variables template |
+| `config/flexisip.conf` | Proxy config template |
+| `config/flexisip-conference.conf` | Conference config template |
+| `.env` | Environment variables template |
 | `docker/proxy/Dockerfile` | Proxy image build |
 | `docker/conference/Dockerfile` | Conference image build |
 | `docker/proxy/entrypoint.sh` | Proxy entrypoint (EKT_SERVER toggle) |
@@ -140,7 +140,7 @@ No unit tests. Verification is manual against a running deployment.
   defaults, not from our config files. Safe to ignore.
 
 - **DoSProtection disabled:** The `[module::DoSProtection]` section in
-  `config/flexisip.conf.example` sets `enabled=false` because the module
+  `config/flexisip.conf` sets `enabled=false` because the module
   requires iptables, which is not available (or desirable) inside Docker
   containers. For production DoS protection, use external mechanisms (cloud
   firewalls, fail2ban, etc.).

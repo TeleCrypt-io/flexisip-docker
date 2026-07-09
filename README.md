@@ -103,18 +103,15 @@ verification steps.
 git clone https://github.com/TeleCrypt-io/flexisip-docker.git
 cd flexisip-docker
 
-# 2. Create your config from the examples
-mkdir -p config
-cp config/flexisip.conf.example config/flexisip.conf
-cp config/flexisip-conference.conf.example config/flexisip-conference.conf
-cp config/users.conf.example config/users.conf
-# Edit the three files: replace <SIP_IP> with your server's public IP,
-# and set real SIP credentials in config/users.conf (see its header for format).
+# 2. Edit the config files (already in the repo)
+# Replace <SIP_IP> with your server's public IP in:
+#   config/flexisip.conf
+#   config/flexisip-conference.conf
+#   config/users.conf   (also set real SIP credentials — see its header for format)
 # NOTE: config/domain-registrations.conf is already provided (empty) — leave it.
 
-# 3. Create your .env from the example
-cp .env.example .env
-# Edit .env: set SIP_IP, TURN credentials
+# 3. Edit .env (already in the repo)
+# Set SIP_IP, TURN credentials
 
 # 4. Pull and start (port 80 must be reachable for ACME challenge)
 docker compose pull

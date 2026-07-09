@@ -12,7 +12,7 @@
 #   - Ports 3478, 5349, 49152-49200 for TURN/STUN relay
 #
 # First run:
-#   cp .env.example .env   # then edit .env
+#   Edit .env (already in repo) — set SIP_IP, TURN credentials
 #   docker compose up -d
 #   docker compose logs -f acme proxy conference
 
