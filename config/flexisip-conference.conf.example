@@ -12,7 +12,7 @@
 # Domain this conference server belongs to. Must match the proxy's host/domain.
 # host=sip.example.com
 # Logging
-log-level=info
+log-level=message
 
 # ------------------------------------------------------------------
 # Conference server
@@ -30,7 +30,7 @@ conference-factory-uris=sip:conference-factory@<SIP_IP>
 conference-focus-uris=sip:conference-focus@<SIP_IP>
 
 # Address of the proxy to send requests through.
-outbound-proxy=sip:host.docker.internal:5060;transport=tcp
+outbound-proxy=sips:host.docker.internal:5061;transport=tls
 
 # Media types offered in conferences.
 supported-media-types=audio video text
@@ -54,7 +54,7 @@ database-connection-string=db='flexisip_conference' user='flexisip_conference' p
 # to discover participant devices. Must use Redis in single-proxy deployments.
 [module::Registrar]
 db-implementation=redis
-redis-server-domain=127.0.0.1
+redis-server-domain=redis
 redis-server-port=6379
 # redis-auth-password=CHANGEME
 # redis-server-encryption=1

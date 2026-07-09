@@ -68,7 +68,7 @@ permissions are `contents: read`). Do not remove this.
 
 ## ACME / TLS automation
 
-- ACME sidecar (`goacme/lego:v5.3.0`) fetches Let's Encrypt IP certificates
+- ACME sidecar (`goacme/lego:v5.2.2`) fetches Let's Encrypt IP certificates
   via HTTP-01 challenge.
 - **Port 80/tcp must be reachable** from the Internet on `SIP_IP`.
 - Let's Encrypt IP certs are short-lived (~6 days), renewed automatically.

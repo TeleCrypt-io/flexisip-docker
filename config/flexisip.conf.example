@@ -14,8 +14,7 @@
 # nat-addresses=<SIP_IP>
 
 # Logging
-log-level=info
-user-agent=flexisip/2.6
+log-level=message
 
 # Runtime directory
 runtime-dir=/var/run/flexisip
@@ -65,6 +64,16 @@ disable-qop-auth=false
 # See https://wiki.linphone.org/xwiki/wiki/public/view/Flexisip/Configuration/Authentication/
 db-implementation=file
 file-path=/etc/flexisip/users.conf
+#
+# users.conf format (MUST match exactly):
+#   version:1
+#   <user>@<domain> <algo>:<password> ;
+# Example:
+#   version:1
+#   test@<SIP_IP> clrtxt:test1234 ;
+# The "version:1" header on line 1 is required.
+# The " ;" (space-semicolon) terminator on each line is mandatory.
+# Supported algorithms: clrtxt, md5, sha256
 
 # ------------------------------------------------------------------
 # Presence: required by the conference server to discover participant devices
