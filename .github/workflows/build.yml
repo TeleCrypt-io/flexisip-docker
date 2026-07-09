@@ -26,6 +26,8 @@ jobs:
   build-debs:
     name: build .deb packages (bonus)
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     if: |
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.head_commit.modified, 'versions.env')
