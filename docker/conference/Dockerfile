@@ -61,9 +61,11 @@ RUN cd /tmp \
  && ldconfig
 
 ARG FLEXISIP_CONFERENCE_VERSION=1.0.0
-# Retry the clone + submodule fetch because gitlab.linphone.org is
-# sometimes flaky and a long submodule tree (30+ submodules) makes a
-# single attempt likely to hit a connection timeout.
+# Clone the main repo shallow (fast) then do a full recursive submodule
+# update.  Retry with full cleanup on failure because gitlab.linphone.org
+# is sometimes flaky, and a partial clone leaves submodule trees in a
+# state that git cannot recover from without deleting the .git/modules
+# subtree.
 RUN for i in 1 2 3 4 5; do \
       if git clone --depth 1 --branch "${FLEXISIP_CONFERENCE_VERSION}" \
             https://gitlab.linphone.org/BC/public/flexisip-conference.git /src; then \
@@ -75,11 +77,19 @@ RUN for i in 1 2 3 4 5; do \
     done
 WORKDIR /src
 RUN for i in 1 2 3 4 5; do \
+      echo "=== Submodule fetch attempt $i ==="; \
       if git submodule update --init --recursive; then \
-        break; \
+        uninit=$(git submodule status --recursive 2>/dev/null | grep -c '^-' || true); \
+        if [ "$uninit" -eq 0 ]; then \
+          echo "All submodules OK"; \
+          break; \
+        fi; \
+        echo "Found $uninit uninitialized submodules (git left empty dirs)"; \
       fi; \
-      echo "submodule update failed (attempt $i), retrying in 15s"; \
-      sleep 15; \
+      echo "Cleaning submodule state and retrying..."; \
+      rm -rf .git/modules/* 2>/dev/null || true; \
+      git submodule foreach --recursive 'rm -rf "$(pwd)"' 2>/dev/null || true; \
+      sleep 30; \
     done
 RUN cmake -G Ninja -B build \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \

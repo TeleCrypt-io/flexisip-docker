@@ -102,15 +102,22 @@ docker compose up -d
 ## How the build works
 
 `.github/workflows/build.yml` runs on push to `main` and on manual trigger.
-It has four jobs:
+It has five jobs:
 
-1. **`build-proxy-deb`** — clones `flexisip` at the tag in `versions.env`,
-   configures with `CPACK_GENERATOR=DEB`, builds, uploads the `.deb`.
-2. **`build-conference-deb`** — same for `flexisip-conference`, with
-   `-DENABLE_EKT_SERVER=ON` so the EKT plugin subpackage is produced.
-3. **`build-proxy-image`** — installs the proxy `.deb` in the proxy image
-   and pushes it to GHCR with both `:<version>` and `:latest` tags.
-4. **`build-conference-image`** — same for the conference image.
+1. **`build-debs`** (bonus) — clones both `flexisip` and `flexisip-conference` at
+   the tags in `versions.env`, builds `.deb` packages with `CPACK_GENERATOR=DEB`,
+   and publishes them to a GitHub Release.  Runs only when `versions.env` has
+   been modified.
+2. **`build-proxy-image`** — multi-stage Docker build (`docker/proxy/Dockerfile`).
+   Clones the `flexisip` repo and its submodules from upstream source, builds
+   the proxy and its dependencies (linphone-sdk, mbedtls, soci, etc.), then
+   produces a minimal runtime image pushed to GHCR with both `:<version>` and
+   `:latest` tags.
+3. **`build-conference-image`** — same for `flexisip-conference`, with
+   `-DENABLE_EKT_SERVER=ON` so the EKT plugin is included in the image.
+4. **`smoke-test`** — pulls both freshly-built images, inspects their OCI
+   labels and entrypoints, and verifies the EKT plugin is present in the
+   conference image.
 5. **`publish-state`** — on full success, records the built versions in
    `state/built.json`.
 

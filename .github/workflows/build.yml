@@ -71,11 +71,30 @@ jobs:
       - name: Clone flexisip at pinned tag
         run: |
           . ./versions.env
-          rm -rf src-proxy
-          git clone --depth 1 --branch "${FLEXISIP_VERSION}" \
-            https://gitlab.linphone.org/BC/public/flexisip.git src-proxy
+          for i in 1 2 3 4 5; do
+            rm -rf src-proxy
+            if git clone --depth 1 --branch "${FLEXISIP_VERSION}" \
+              https://gitlab.linphone.org/BC/public/flexisip.git src-proxy; then
+              break
+            fi
+            echo "git clone failed (attempt $i), retrying in 15s"
+            sleep 15
+          done
           cd src-proxy
-          git submodule update --init --recursive
+          for i in 1 2 3 4 5; do
+            echo "=== Submodule fetch attempt $i ==="
+            if git submodule update --init --recursive; then
+              uninit=$(git submodule status --recursive 2>/dev/null | grep -c '^-' || true)
+              if [ "$uninit" -eq 0 ]; then
+                echo "All submodules OK"
+                break
+              fi
+            fi
+            echo "Cleaning submodule state and retrying..."
+            rm -rf .git/modules/* 2>/dev/null || true
+            git submodule foreach --recursive 'rm -rf "$(pwd)"' 2>/dev/null || true
+            sleep 30
+          done
 
       - name: Configure ccache (proxy)
         uses: actions/cache@v4
@@ -103,11 +122,30 @@ jobs:
       - name: Clone flexisip-conference at pinned tag
         run: |
           . ./versions.env
-          rm -rf src-conf
-          git clone --depth 1 --branch "${FLEXISIP_CONFERENCE_VERSION}" \
-            https://gitlab.linphone.org/BC/public/flexisip-conference.git src-conf
+          for i in 1 2 3 4 5; do
+            rm -rf src-conf
+            if git clone --depth 1 --branch "${FLEXISIP_CONFERENCE_VERSION}" \
+              https://gitlab.linphone.org/BC/public/flexisip-conference.git src-conf; then
+              break
+            fi
+            echo "git clone failed (attempt $i), retrying in 15s"
+            sleep 15
+          done
           cd src-conf
-          git submodule update --init --recursive
+          for i in 1 2 3 4 5; do
+            echo "=== Submodule fetch attempt $i ==="
+            if git submodule update --init --recursive; then
+              uninit=$(git submodule status --recursive 2>/dev/null | grep -c '^-' || true)
+              if [ "$uninit" -eq 0 ]; then
+                echo "All submodules OK"
+                break
+              fi
+            fi
+            echo "Cleaning submodule state and retrying..."
+            rm -rf .git/modules/* 2>/dev/null || true
+            git submodule foreach --recursive 'rm -rf "$(pwd)"' 2>/dev/null || true
+            sleep 30
+          done
 
       - name: Configure ccache (conference)
         uses: actions/cache@v4
