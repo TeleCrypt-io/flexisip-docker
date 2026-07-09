@@ -1,5 +1,5 @@
 # flexisip.conf — example configuration for the Flexisip SIP proxy (v2.6+).
-# Copy to /etc/opt/belledonne-communications/flexisip/flexisip.conf and adjust.
+# Copy to /etc/flexisip/flexisip.conf and adjust.
 #
 # The ACME sidecar (lego) writes cert.pem + privkey.pem into
 # /etc/flexisip/tls/ via the shared Docker volume.  The proxy auto-reloads

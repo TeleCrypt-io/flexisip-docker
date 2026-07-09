@@ -103,6 +103,7 @@ RUN cmake -G Ninja -B build \
 # ---- runtime stage --------------------------------------------------------
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH=/opt/belledonne-communications/flexisip-conference/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 LABEL org.opencontainers.image.title="flexisip-conference"
 LABEL org.opencontainers.image.description="Conference server (unofficial community build) for TeleCrypt-io, with EKT plugin for E2EE"

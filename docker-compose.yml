@@ -104,7 +104,8 @@ services:
       - SIP_IP=${SIP_IP:-203.0.113.10}
     volumes:
       - flexisip_certs:/etc/flexisip/tls:ro
-      - ./config/flexisip.conf:/etc/opt/belledonne-communications/flexisip/flexisip.conf:ro
+      - ./config/flexisip.conf:/etc/flexisip/flexisip.conf:ro
+      - ./config/users.conf:/etc/flexisip/users.conf:ro
       - proxy_data:/var/opt/belledonne-communications
     depends_on:
       acme:

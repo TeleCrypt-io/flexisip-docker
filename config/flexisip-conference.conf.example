@@ -1,6 +1,5 @@
 # flexisip-conference.conf — example configuration for the Flexisip conference server.
-# Copy to /etc/opt/belledonne-communications/flexisip-conference/flexisip-conference.conf
-# and adjust.
+# Copy to /etc/flexisip/flexisip-conference.conf and adjust.
 #
 # When ENABLE_EKT_SERVER=true is set on the container, the entrypoint appends an
 # E2EE block to the [conference-server] section (audio-engine-mode=sfu,
