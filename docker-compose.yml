@@ -3,14 +3,13 @@
 #
 # Adjust:
 #   - SIP_IP: public IP address of this host (used for TLS + ACME)
-#   - LETSENCRYPT_EMAIL: contact email for Let's Encrypt account
-#   - DB passwords: rotate the placeholders
-#   - TURN_PUBLIC_IP: the public IP of the host running coturn
+#   - TURN_PUBLIC_IP, TURN_USER, TURN_PASSWORD: coturn credentials
 #
 # Port requirements:
 #   - Port 80/tcp must be reachable from the Internet on SIP_IP
 #     (used by Let's Encrypt HTTP-01 challenge)
 #   - Port 5061/tcp+udp for SIP TLS signaling (host network)
+#   - Ports 3478, 5349, 49152-49200 for TURN/STUN relay
 #
 # First run:
 #   cp .env.example .env   # then edit .env
@@ -41,7 +40,6 @@ services:
       - -c
       - |
         set -e
-        EMAIL="$${LETSENCRYPT_EMAIL:?LETSENCRYPT_EMAIL is required}"
         IP="$${SIP_IP:?SIP_IP is required}"
         DIR=/etc/lego
         CERT_DIR=/certs
@@ -50,7 +48,6 @@ services:
         fetch_cert() {
           echo "==> Requesting IP certificate for $$IP ..."
           lego \
-            --email "$$EMAIL" \
             --http --http-port 80 \
             --accept-tos \
             --server https://acme-v02.api.letsencrypt.org/directory \
@@ -69,7 +66,6 @@ services:
         renew_cert() {
           echo "==> Attempting renewal for $$IP ..."
           lego \
-            --email "$$EMAIL" \
             --http --http-port 80 \
             --accept-tos \
             --server https://acme-v02.api.letsencrypt.org/directory \
@@ -93,7 +89,6 @@ services:
         done
     environment:
       - SIP_IP=${SIP_IP:?Set SIP_IP in .env}
-      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL:?Set LETSENCRYPT_EMAIL in .env}
     volumes:
       - flexisip_certs:/certs
     healthcheck:
@@ -155,10 +150,10 @@ services:
     container_name: flexisip-mariadb
     restart: unless-stopped
     environment:
-      - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD:-rootpw-CHANGEME}
+      - MARIADB_ROOT_PASSWORD=flexisip
       - MARIADB_DATABASE=flexisip_conference
       - MARIADB_USER=flexisip_conference
-      - MARIADB_PASSWORD=${MARIADB_CONFERENCE_PASSWORD:-confpw-CHANGEME}
+      - MARIADB_PASSWORD=flexisip
     volumes:
       - mariadb_data:/var/lib/mysql
     healthcheck:

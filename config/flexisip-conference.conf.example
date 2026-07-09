@@ -48,7 +48,7 @@ supported-media-types=audio video text
 # Database: MariaDB/MySQL for chatroom and conference state.
 # The schema is created automatically if the database is empty.
 database-backend=mysql
-database-connection-string=db='flexisip_conference' user='flexisip_conference' password='CHANGEME' host='mariadb'
+database-connection-string=db='flexisip_conference' user='flexisip_conference' password='flexisip' host='mariadb'
 
 # Registrar backend: the conference server queries the proxy's registrar
 # to discover participant devices. Must use Redis in single-proxy deployments.

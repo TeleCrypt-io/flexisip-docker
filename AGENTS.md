@@ -73,6 +73,7 @@ permissions are `contents: read`). Do not remove this.
 - **Port 80/tcp must be reachable** from the Internet on `SIP_IP`.
 - Let's Encrypt IP certs are short-lived (~6 days), renewed automatically.
 - No DNS required — IP-address certificates only.
+- No email required — Let's Encrypt account is created without email.
 - Certificate + key are written to shared `flexisip_certs` Docker volume.
 - Proxy auto-reloads certs every 60 seconds.
 
@@ -81,6 +82,10 @@ permissions are `contents: read`). Do not remove this.
 All config files use `<SIP_IP>` as a placeholder. Never hardcode IPs in
 committed files. The user replaces `<SIP_IP>` with their server's public IP
 during setup.
+
+DB passwords are hardcoded to `flexisip` (internal only — MariaDB is not
+exposed to the Internet). TURN credentials must be changed from defaults
+(exposed to Internet on ports 3478/5349).
 
 ## E2EE
 

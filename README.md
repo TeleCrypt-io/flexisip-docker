@@ -111,7 +111,7 @@ cp config/flexisip-conference.conf.example config/flexisip-conference.conf
 
 # 3. Create your .env from the example
 cp .env.example .env
-# Edit .env: set SIP_IP, LETSENCRYPT_EMAIL, rotate DB passwords
+# Edit .env: set SIP_IP, TURN credentials
 
 # 4. Pull and start (port 80 must be reachable for ACME challenge)
 docker compose pull
