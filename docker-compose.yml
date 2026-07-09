@@ -106,6 +106,7 @@ services:
       - flexisip_certs:/etc/flexisip/tls:ro
       - ./config/flexisip.conf:/etc/flexisip/flexisip.conf:ro
       - ./config/users.conf:/etc/flexisip/users.conf:ro
+      - ./config/domain-registrations.conf:/etc/flexisip/domain-registrations.conf:ro
       - proxy_data:/var/opt/belledonne-communications
     depends_on:
       acme:

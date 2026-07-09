@@ -123,6 +123,13 @@ auth-domains-mode=static
 auth-domains=<SIP_IP>
 
 # ------------------------------------------------------------------
+# STUN server — disabled because coturn already provides STUN/TURN.
+# Enabling this causes a port 3478 conflict with coturn.
+# ------------------------------------------------------------------
+[stun-server]
+enabled=false
+
+# ------------------------------------------------------------------
 # domain-registrations.conf — the proxy logs a warning about this missing
 # file on every startup.  This is cosmetic and harmless — the file is
 # only needed for multi-domain routing, which this deployment does not
