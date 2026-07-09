@@ -187,5 +187,16 @@ the full attribution.
 ## Disclaimer
 
 This is an **unofficial community build**. It is not endorsed by, affiliated
-with, or supported by Belledonne Communications. Use at your own risk; consult
-a lawyer if you have any concerns about the AGPL terms in your jurisdiction.
+with, or supported by Belledonne Communications.
+
+This repository is a build wrapper for freely available open-source software
+(AGPLv3-licensed Flexisip and flexisip-conference by Belledonne Communications).
+It does not contain original proprietary code. The EKT server plugin is provided
+as part of the upstream open-source project under the conditions described in
+`NOTICE`.
+
+**No responsibility for misuse.** The author(s) of this repository bear no
+responsibility or liability for any misuse, damage, or legal consequences
+arising from the use of the software, images, or configurations provided
+herein. Use at your own risk. Consult a qualified lawyer for legal advice
+regarding AGPL compliance, EKT licensing, or deployment in your jurisdiction.

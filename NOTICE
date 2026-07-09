@@ -39,6 +39,13 @@ advice.**
 
 ---
 
+No responsibility for misuse. This repository is a build wrapper for
+freely available open-source software. The author(s) bear no liability
+for any damages, legal consequences, or misuse arising from the use of
+the resulting Docker images, packages, or configurations.
+
+---
+
 All original copyright notices and license texts from the upstream
 projects are preserved in their respective submodules (during the build
 process) and should be retained in any redistribution of the resulting

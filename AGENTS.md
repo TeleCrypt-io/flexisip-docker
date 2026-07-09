@@ -90,6 +90,7 @@ during setup.
 - **EKT module license:** Provided by Belledonne Communications. For proprietary
   license holders, a separate license may be required. For AGPLv3 self-hosting
   (this project's purpose), it is freely usable. See `NOTICE`.
+- **No liability:** Author(s) bear no responsibility for misuse. See `NOTICE`.
 
 ## Key files
 
