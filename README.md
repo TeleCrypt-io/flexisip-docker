@@ -107,7 +107,10 @@ cd flexisip-docker
 mkdir -p config
 cp config/flexisip.conf.example config/flexisip.conf
 cp config/flexisip-conference.conf.example config/flexisip-conference.conf
-# Edit both files: replace <SIP_IP> with your server's public IP
+cp config/users.conf.example config/users.conf
+# Edit the three files: replace <SIP_IP> with your server's public IP,
+# and set real SIP credentials in config/users.conf (see its header for format).
+# NOTE: config/domain-registrations.conf is already provided (empty) — leave it.
 
 # 3. Create your .env from the example
 cp .env.example .env

@@ -166,6 +166,11 @@ services:
     container_name: flexisip-redis
     restart: unless-stopped
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    # Loopback-only publish: the proxy runs on host network and reaches Redis
+    # at 127.0.0.1:6379. Redis has no auth password, so we bind to loopback
+    # (not 0.0.0.0) to avoid exposing it to the Internet.
+    ports:
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -187,7 +192,6 @@ services:
       --log-file=stdout
       --realm=${TURN_REALM:-sip.example.com}
       --listening-port=3478
-      --tls-listening-port=5349
       --relay-ip=0.0.0.0
       --external-ip=${TURN_PUBLIC_IP}
       --min-port=49152
