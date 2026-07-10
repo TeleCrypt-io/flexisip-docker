@@ -107,8 +107,14 @@ cd flexisip-docker
 # Replace <SIP_IP> with your server's public IP in:
 #   config/flexisip.conf
 #   config/flexisip-conference.conf
-#   config/users.conf   (also set real SIP credentials — see its header for format)
+#   config/users.conf   (also set real SIP credentials — format below)
 # NOTE: config/domain-registrations.conf is already provided (empty) — leave it.
+#
+# users.conf format (NO comments allowed — Flexisip rejects # anywhere):
+#   version:1
+#   <user>@<domain> <algo>:<password> ;
+# Supported algorithms: clrtxt, md5, sha256. The " ;" terminator is mandatory.
+# Example:  version:1\n  test@203.0.113.10 clrtxt:test1234 ;
 
 # 3. Edit .env (already in the repo)
 # Set SIP_IP, TURN credentials

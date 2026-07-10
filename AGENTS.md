@@ -134,10 +134,14 @@ No unit tests. Verification is manual against a running deployment.
 
 ## Known issues
 
-- **auth-domains-mode=legacy warning:** The conference image's bundled config
-  or upstream defaults may emit `auth-domains-mode=legacy` deprecation warning
-  at startup. This is harmless — the warning comes from upstream Flexisip v2.6
-  defaults, not from our config files. Safe to ignore.
+- **auth-domains-mode=legacy warning:** Previously emitted by both proxy and
+  conference at startup (from upstream Flexisip v2.6 defaults). Now suppressed
+  in both config/flexisip.conf and config/flexisip-conference.conf via a
+  [module::Authorization] section with auth-domains-mode=static.
+
+- **users.conf has NO comments:** Flexisip's authdb parser rejects # comments
+  anywhere in the file. config/users.conf contains only version:1 + credential
+  lines. The format is documented in README.md (Quick start) instead.
 
 - **DoSProtection disabled:** The `[module::DoSProtection]` section in
   `config/flexisip.conf` sets `enabled=false` because the module

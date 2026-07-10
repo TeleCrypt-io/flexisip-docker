@@ -100,6 +100,9 @@ services:
     container_name: flexisip-proxy
     restart: unless-stopped
     network_mode: host
+    # SYS_RESOURCE lets the proxy raise RLIMIT_NOFILE (harmless warning otherwise).
+    cap_add:
+      - SYS_RESOURCE
     environment:
       - SIP_IP=${SIP_IP:-203.0.113.10}
     volumes:
@@ -122,6 +125,9 @@ services:
     image: ghcr.io/telecrypt-io/flexisip-conference:latest
     container_name: flexisip-conference
     restart: unless-stopped
+    # SYS_RESOURCE lets the conference server raise RLIMIT_NOFILE (harmless warning otherwise).
+    cap_add:
+      - SYS_RESOURCE
     environment:
       # Set to "true" to enable true end-to-end encrypted conferences.
       # Requires the EKT plugin (already installed in the image) and configures
