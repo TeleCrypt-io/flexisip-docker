@@ -139,6 +139,38 @@ ENABLE_EKT_SERVER=true
 docker compose up -d
 ```
 
+## Important configuration notes
+
+- **Transports:** flexisip 2.6 accepts only `sip:` (UDP) and `sips:` (TLS)
+  prefixes in `transports`. A `tcp:` prefix crashes the proxy. The proxy is
+  configured with both `sips:0.0.0.0:5061` (client TLS) and
+  `sip:0.0.0.0:5060` (internal hop to the conference server's UDP contact).
+- **Conference server is on host networking** (`network_mode: host`). It binds
+  `127.0.0.1:6064` and the host-networked proxy reaches it via loopback. Under
+  host networking Docker service names don't resolve, so its MariaDB/Redis point
+  at `127.0.0.1` (both published on loopback in `docker-compose.yml`) — MariaDB
+  is **not** exposed to the Internet.
+- **MediaRelay** is enabled (`[module::MediaRelay] enabled=true`). flexisip 2.6
+  does not accept `force-relay` / `relay-ips` in that section; the module engages
+  automatically on NAT-detected legs.
+- **Conference routing is automatic** — the conference server registers its
+  factory URI with the proxy's registrar; no proxy route directive is needed
+  (an old `conference-factory-uri` key is invalid in v2.6).
+
+## Testing notes
+
+- **Use Linphone as the reference client.** `baresip` cannot do group E2EE
+  (no LIME/EKT). `linphone-cli` ≥ 5.2 works (native on Ubuntu 24.04).
+- **Two clients on one host collide on RTP port 7078** (SO_REUSEPORT). For
+  multi-client testing on a single machine, isolate each client in its own
+  network namespace, or use separate hosts.
+- **Headless servers need an audio source** or RTP/ZRTP never flows. Use a
+  pulseaudio null sink (`module-null-sink`) and point clients at it.
+- **Let's Encrypt / mbedTLS CA caveat:** mbedTLS-based Linphone clients may
+  reject the 2025 Let's Encrypt chain even when `openssl s_client` validates it.
+  Do **not** ship `verify_server_certs=0` in production — ensure the client CA
+  bundle is current and document the caveat instead.
+
 ## How the build works
 
 `.github/workflows/build.yml` runs on push to `main` and on manual trigger.

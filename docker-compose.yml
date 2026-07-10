@@ -8,7 +8,8 @@
 # Port requirements:
 #   - Port 80/tcp must be reachable from the Internet on SIP_IP
 #     (used by Let's Encrypt HTTP-01 challenge)
-#   - Port 5061/tcp+udp for SIP TLS signaling (host network)
+#   - Port 5061/tcp+udp for SIP TLS signaling, 5060/udp for the internal
+#     proxy→conference UDP hop (host network)
 #   - Ports 3478, 5349, 49152-49200 for TURN/STUN relay
 #
 # First run:
@@ -125,6 +126,11 @@ services:
     image: ghcr.io/telecrypt-io/flexisip-conference:latest
     container_name: flexisip-conference
     restart: unless-stopped
+    # Host network: the conference server listens on 127.0.0.1:6064 and the
+    # proxy (also host network) can reach it via loopback. Under host networking
+    # Docker service names do NOT resolve, so the config points MariaDB/Redis at
+    # 127.0.0.1 (both are published on loopback below).
+    network_mode: host
     # SYS_RESOURCE lets the conference server raise RLIMIT_NOFILE (harmless warning otherwise).
     cap_add:
       - SYS_RESOURCE
@@ -141,8 +147,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
   # ---------------------------------------------------------------------------
   # MariaDB — chatroom and conference state
@@ -151,6 +155,10 @@ services:
     image: mariadb:11.4
     container_name: flexisip-mariadb
     restart: unless-stopped
+    # Loopback-only publish: the conference server runs on host network and
+    # reaches MariaDB at 127.0.0.1:3306. Not exposed to the Internet.
+    ports:
+      - "127.0.0.1:3306:3306"
     environment:
       - MARIADB_ROOT_PASSWORD=flexisip
       - MARIADB_DATABASE=flexisip_conference

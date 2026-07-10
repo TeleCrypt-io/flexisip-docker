@@ -143,6 +143,29 @@ No unit tests. Verification is manual against a running deployment.
   anywhere in the file. config/users.conf contains only version:1 + credential
   lines. The format is documented in README.md (Quick start) instead.
 
+- **`tcp:` transport prefix crashes the proxy:** flexisip 2.6 only accepts
+  `sip:` (UDP) and `sips:` (TLS) in `transports`. A `tcp:` prefix →
+  "could not enable transport … Invalid argument" crash-loop. The proxy uses
+  both `sip:` (5060, the proxy→conference UDP hop) and `sips:` (5061, client TLS).
+
+- **Conference server runs on host networking** (`network_mode: host`): it binds
+  127.0.0.1:6064 and the proxy reaches it via loopback. Because Docker service
+  names don't resolve under host networking, the conference config points
+  MariaDB/Redis at 127.0.0.1 (published on loopback in docker-compose.yml).
+
+- **MediaRelay enabled (`enabled=true`):** engages automatically on NAT legs.
+  flexisip 2.6 does NOT accept `force-relay` / `relay-ips` in that section.
+
+- **Conference routing is automatic:** no `conference-factory-uri` proxy directive
+  (invalid in v2.6) — the conference server registers its factory URI with the
+  proxy's registrar.
+
+- **Reference client is Linphone** (baresip can't do group E2EE / LIME+EKT).
+  Multi-client testing on one host collides on RTP port 7078 — isolate clients
+  in separate network namespaces. Headless testing needs a pulseaudio null sink.
+  mbedTLS Linphone clients may reject the 2025 Let's Encrypt chain; never ship
+  `verify_server_certs=0` in production.
+
 - **DoSProtection disabled:** The `[module::DoSProtection]` section in
   `config/flexisip.conf` sets `enabled=false` because the module
   requires iptables, which is not available (or desirable) inside Docker
