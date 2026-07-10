@@ -166,6 +166,26 @@ No unit tests. Verification is manual against a running deployment.
   mbedTLS Linphone clients may reject the 2025 Let's Encrypt chain; never ship
   `verify_server_certs=0` in production.
 
+- **E2EE is on by default** (`ENABLE_EKT_SERVER=true` in `.env`). With it off,
+  conferences still work but media is NOT ZRTP-encrypted and flexisip raises no
+  error (silently absent E2EE). Verify via the conference log line
+  `EKT server plugin for core sip:conference-focus@… has been succesfully loaded`.
+
+- **`482 Loop Detected` on NATed REGISTER (upstream issue #187):** a REGISTER
+  whose visible source IP equals the proxy's own public IP is rejected as a loop.
+  Mitigate with client STUN/TURN (coturn, included) so clients advertise a
+  public/relay Contact, and keep `aliases=<SIP_IP>` in `[global]`. Test with
+  genuinely remote clients — same-host netns masquerade presenting the server's
+  own IP is a false-positive and not representative.
+
+- **Re-register after proxy restart:** Redis-persisted bindings go stale on
+  `docker restart flexisip-proxy` → `404`/`482` until clients re-register.
+  Restart clients or shorten `default-expires` during rollout.
+
+- **Healthchecks added (Issue 7):** compose now health-checks mariadb, redis,
+  coturn (UDP 3478), proxy (TCP 5061), conference (UDP 6064). Monitor proxy
+  `503`s, cert expiry, conference failures, RTP-relay.
+
 - **DoSProtection disabled:** The `[module::DoSProtection]` section in
   `config/flexisip.conf` sets `enabled=false` because the module
   requires iptables, which is not available (or desirable) inside Docker

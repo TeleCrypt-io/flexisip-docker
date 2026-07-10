@@ -118,6 +118,13 @@ services:
     # Host network so the proxy owns the public SIP TLS port (5061).
     # If you cannot use host networking, expose 5061/tcp+udp instead and
     # set the global "nat-addresses" to the host's public IP.
+    healthcheck:
+      # TCP check on the SIP TLS port (host-networked, reachable on loopback).
+      test: ["CMD-SHELL", "timeout 2 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/5061'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   # ---------------------------------------------------------------------------
   # Conference server
@@ -147,6 +154,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      # UDP check on the conference server's loopback control/transport port.
+      test: ["CMD-SHELL", "timeout 2 bash -c 'cat < /dev/null > /dev/udp/127.0.0.1/6064'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   # ---------------------------------------------------------------------------
   # MariaDB — chatroom and conference state
@@ -215,6 +229,13 @@ services:
       --user=${TURN_USER:-turnuser}:${TURN_PASSWORD:-turnpw-CHANGEME}
       --no-tls
       --no-dtls
+    healthcheck:
+      # UDP check on the STUN/TURN listener.
+      test: ["CMD-SHELL", "nc -z -u 127.0.0.1 3478"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     # Use host network so TURN can bind the relay port range directly.
 
 volumes:

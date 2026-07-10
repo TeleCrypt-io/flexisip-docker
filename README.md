@@ -157,6 +157,47 @@ docker compose up -d
   factory URI with the proxy's registrar; no proxy route directive is needed
   (an old `conference-factory-uri` key is invalid in v2.6).
 
+## Production considerations
+
+- **E2EE is on by default** (`ENABLE_EKT_SERVER=true` in `.env`). If you set it
+  to `false`, conferences still work but media is **not** ZRTP-encrypted — and
+  flexisip raises **no error**, so E2EE is silently absent. Verify it is active
+  by grepping the conference log for:
+  `EKT server plugin for core sip:conference-focus@… has been succesfully loaded`.
+
+- **Behind-NAT clients / `482 Loop Detected` (upstream issue
+  [#187](https://github.com/BelledonneCommunications/flexisip/issues/187)):**
+  a `REGISTER` from a client behind NAT whose visible source IP equals the
+  proxy's own public IP is rejected with `482 Loop Detected` (the proxy thinks
+  the request looped back to itself). Reliable mitigations:
+  1. Configure clients with **STUN/TURN** (coturn is included — point the client
+     at `stun:<SIP_IP>:3478` / `turn:<SIP_IP>:3478?transport=udp` using the
+     `TURN_USER`/`TURN_PASSWORD` from `.env`) so they advertise a
+     public/relay Contact.
+  2. Keep `aliases=<SIP_IP>` in `[global]` (already set) so the proxy's
+     self-identity is unambiguous.
+  Test with genuinely remote clients — a same-host netns masquerade that presents
+  the server's own IP triggers the false loop and is not representative.
+
+- **Re-register after a proxy restart:** registrar bindings persist in Redis, so
+  after `docker restart flexisip-proxy` clients with now-stale bindings may get
+  `404`/`482` until they re-register. Restart clients, or use a shorter
+  `default-expires` in `[module::Registrar]` during rollout.
+
+- **Conference lifecycle:** finished-conference state is pruned automatically in
+  MariaDB. Participant limits are governed by `max-contacts-per-registration`
+  (proxy) and the conference server's internal limits — tune for your scale.
+
+- **Monitoring / healthchecks:** compose ships healthchecks for `mariadb`,
+  `redis`, `coturn`, `proxy`, and `conference`. Alert on proxy `503`s, TLS cert
+  expiry (renewed automatically ~every 6 days by lego), conference-server
+  failures, and RTP-relay health.
+
+- **TURN/ICE client example (Linphone):** set the STUN server to
+  `stun:<SIP_IP>:3478` and the TURN server to
+  `turn:<SIP_IP>:3478?transport=udp` with the credentials from `.env`. This is
+  required for clients behind symmetric NAT to establish media.
+
 ## Testing notes
 
 - **Use Linphone as the reference client.** `baresip` cannot do group E2EE
