@@ -67,15 +67,10 @@ HTTP-01 challenge.
 **No DNS required.** This solution uses IP-address certificates, so you don't
 need a domain name or DNS API access.
 
-## End-to-end encryption (opt-in)
+## End-to-end encryption (on by default)
 
-E2EE conferences are **not** the default. The conference server's default
-audio mode is `mixer`, which decodes/mixes/re-encodes media and is
-**incompatible** with true E2EE.
-
-To enable E2EE, set `ENABLE_EKT_SERVER=true` on the conference container.
-The entrypoint script then appends the E2EE configuration to
-`flexisip-conference.conf`:
+E2EE group conferences are **enabled by default**. `config/flexisip-conference.conf`
+ships the conference server in **SFU mode** with ZRTP media encryption:
 
 ```ini
 [conference-server]
@@ -86,7 +81,12 @@ encryption=zrtp
 
 These three lines switch the conference to **SFU mode** (server only forwards
 RTP packets and rewrites headers, no decode/encode), which is what makes E2EE
-possible. The EKT plugin (always installed) distributes encryption keys.
+possible. The EKT plugin (always installed) distributes encryption keys. **The
+conference entrypoint does NOT rewrite this file** — what you see is what runs.
+`ENABLE_EKT_SERVER=true` in `.env` is retained only as an intent signal.
+
+To DISABLE E2EE, comment out the three lines above (media then travels
+unencrypted and flexisip raises no error — verify after changing).
 
 **EKT plugin license:** The EKT server plugin is provided by **Belledonne
 Communications** under the terms described in the upstream
@@ -148,10 +148,11 @@ The ACME sidecar will automatically obtain a TLS certificate on first start.
 The proxy will begin serving SIP over TLS once the certificate is available
 (usually within 30-60 seconds).
 
-For E2EE:
+E2EE is already enabled in `config/flexisip-conference.conf`. `ENABLE_EKT_SERVER=true`
+in `.env` is kept as an intent signal (it no longer triggers any runtime change):
 
 ```bash
-# In .env:
+# In .env (intent signal only — E2EE ships in the conference config):
 ENABLE_EKT_SERVER=true
 
 # Then:
@@ -178,17 +179,28 @@ docker compose up -d
 
 ## Production considerations
 
-- **E2EE is on by default** (`ENABLE_EKT_SERVER=true` in `.env`). If you set it
-  to `false`, conferences still work but media is **not** ZRTP-encrypted — and
-  flexisip raises **no error**, so E2EE is silently absent. Verify it is active
-  by grepping the conference log for:
+- **E2EE is on by default** — `config/flexisip-conference.conf` ships
+  `audio-engine-mode=sfu` + `video-engine-mode=sfu` + `encryption=zrtp`;
+  `ENABLE_EKT_SERVER=true` in `.env` is an intent signal only. To turn E2EE off,
+  comment those three lines in the conference config (not via `.env`). With E2EE
+  off, conferences still work but media is **not** ZRTP-encrypted — and flexisip
+  raises **no error**, so E2EE is silently absent. Verify it is active by grepping
+  the conference log for:
   `EKT server plugin for core sip:conference-focus@… has been succesfully loaded`.
 
-- **Behind-NAT clients / `482 Loop Detected` (upstream issue
+- **`482 Loop Detected` on client REGISTER — root cause `reg-on-response`:**
+  `config/flexisip.conf` sets `reg-on-response=false` (this proxy is the terminal
+  registrar). With `true`, the Registrar forwards each REGISTER to the domain's
+  next hop; in a single-proxy deployment that next hop is the proxy itself →
+  self-forward → `482 Loop Detected` on **every** client REGISTER (not just NATed
+  ones). The conference server registers over `127.0.0.1` and slipped past the
+  loop check, which masked the bug. **Keep `reg-on-response=false` unless a proxy
+  is chained in front.**
+
+- **`482 Loop Detected` on INVITE / forward-loop (upstream issue
   [#187](https://github.com/BelledonneCommunications/flexisip/issues/187)):**
-  a `REGISTER` from a client behind NAT whose visible source IP equals the
-  proxy's own public IP is rejected with `482 Loop Detected` (the proxy thinks
-  the request looped back to itself). Reliable mitigations:
+  an INVITE from a NATed client whose visible source IP equals the proxy's own
+  public IP can be misclassified as a routing loop. Reliable mitigations:
   1. Configure clients with **STUN/TURN** (coturn is included — point the client
      at `stun:<SIP_IP>:3478` / `turn:<SIP_IP>:3478?transport=udp` using the
      `TURN_USER`/`TURN_PASSWORD` from `.env`) so they advertise a

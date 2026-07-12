@@ -112,13 +112,35 @@ produce verified, copy-paste-safe values.
 
 ## E2EE
 
-- Opt-in via `ENABLE_EKT_SERVER=true` on the conference container.
-- Requires SFU mode (`audio-engine-mode=sfu`, `video-engine-mode=sfu`, `encryption=zrtp`).
+- **Enabled by default** in `config/flexisip-conference.conf` (`[conference-server]`
+  `audio-engine-mode=sfu`, `video-engine-mode=sfu`, `encryption=zrtp`). No runtime
+  rewriting — the config ships ready.
+- `ENABLE_EKT_SERVER=true` in `.env` is retained only as an **intent signal**; it no
+  longer triggers any entrypoint config change.
 - EKT plugin is always installed but only active in SFU mode.
+- **Verify:** conference log line
+  `EKT server plugin for core sip:conference-focus@… has been succesfully loaded`
+  and `E2EE mode ACTIVE`.
+- **To disable E2EE:** comment out the three `audio-engine-mode`/`video-engine-mode`/
+  `encryption` lines in `config/flexisip-conference.conf`. (Media then unencrypted;
+  flexisip raises no error.)
 - **EKT module license:** Provided by Belledonne Communications. For proprietary
   license holders, a separate license may be required. For AGPLv3 self-hosting
   (this project's purpose), it is freely usable. See `NOTICE`.
 - **No liability:** Author(s) bear no responsibility for misuse. See `NOTICE`.
+
+## Configuring E2EE — in a flash (for LLMs and operators)
+E2EE group conferences work out of the box. Nothing is rewritten at runtime.
+1. `config/flexisip-conference.conf` already contains, under `[conference-server]`:
+     audio-engine-mode=sfu
+     video-engine-mode=sfu
+     encryption=zrtp
+   Leave them as-is (uncomment only if ever absent).
+2. `.env` keeps `ENABLE_EKT_SERVER=true` as an intent signal (no rewriting).
+3. Deploy: `docker compose up -d`.
+4. Verify: `docker logs flexisip-conference 2>&1 | grep -E "EKT server plugin|E2EE mode ACTIVE"`
+   Expect both lines. If missing, E2EE is NOT active (media unencrypted).
+To DISABLE E2EE: comment the three lines in step 1.
 
 ## Key files
 
@@ -182,17 +204,27 @@ No unit tests. Verification is manual against a running deployment.
   mbedTLS Linphone clients may reject the 2025 Let's Encrypt chain; never ship
   `verify_server_certs=0` in production.
 
-- **E2EE is on by default** (`ENABLE_EKT_SERVER=true` in `.env`). With it off,
-  conferences still work but media is NOT ZRTP-encrypted and flexisip raises no
-  error (silently absent E2EE). Verify via the conference log line
+- **E2EE is on by default** — `config/flexisip-conference.conf` ships
+  `audio-engine-mode=sfu` + `video-engine-mode=sfu` + `encryption=zrtp`;
+  `ENABLE_EKT_SERVER=true` in `.env` is an intent signal only. With E2EE off
+  (the three lines commented), conferences still work but media is NOT
+  ZRTP-encrypted and flexisip raises no error (silently absent E2EE). Verify via
+  the conference log line
   `EKT server plugin for core sip:conference-focus@… has been succesfully loaded`.
 
-- **`482 Loop Detected` on NATed REGISTER (upstream issue #187):** a REGISTER
-  whose visible source IP equals the proxy's own public IP is rejected as a loop.
-  Mitigate with client STUN/TURN (coturn, included) so clients advertise a
-  public/relay Contact, and keep `aliases=<SIP_IP>` in `[global]`. Test with
-  genuinely remote clients — same-host netns masquerade presenting the server's
-  own IP is a false-positive and not representative.
+- **`482 Loop Detected` on client REGISTER — root cause `reg-on-response`:**
+  `config/flexisip.conf` sets `reg-on-response=false` (this proxy is the terminal
+  registrar). With `true`, the Registrar forwards each REGISTER to the domain's
+  next hop; in a single-proxy deployment that next hop is the proxy itself →
+  self-forward → `482 Loop Detected` on every client REGISTER. The conference
+  server registers over `127.0.0.1` and slipped past the loop check, masking the
+  bug. **Keep `reg-on-response=false` unless a proxy is chained in front.**
+- **`482 Loop Detected` on INVITE / forward-loop (upstream #187):** an INVITE from
+  a NATed client whose visible source IP equals the proxy's own public IP can be
+  misclassified as a routing loop. Mitigate with client STUN/TURN (coturn,
+  included) so clients advertise a public/relay Contact, and keep
+  `aliases=<SIP_IP>` in `[global]`. Test with genuinely remote clients — same-host
+  netns masquerade presenting the server's own IP is a false-positive.
 
 - **Re-register after proxy restart:** Redis-persisted bindings go stale on
   `docker restart flexisip-proxy` → `404`/`482` until clients re-register.
