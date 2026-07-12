@@ -96,6 +96,24 @@ For AGPLv3 self-hosting (which this repository is built for), the plugin is
 freely usable. See `NOTICE` for the full attribution and `SECURITY.md` for
 verification steps.
 
+## Configuration model (local configs)
+
+This project ships **ready-to-use configuration files** under `config/`. They are
+**local files** — mounted from the host into the containers — and are *meant* to be
+edited on your server. The repository provides sensible, E2EE-capable defaults; the
+only mandatory local change is substituting your public IP for the `<SIP_IP>`
+placeholder (and setting real credentials in `config/users.conf`).
+
+**IP and domain management stays local by design.** The images do **not** inject or
+rewrite config values at runtime (no in-container `<SIP_IP>` substitution was adopted —
+configs are local by design, and that is intentional). This keeps deployments
+reproducible and puts your addressing under your own control. Treat
+`config/flexisip.conf`, `config/flexisip-conference.conf`, and `config/users.conf` as
+files you own.
+
+Environment-only settings live in `.env`: `SIP_IP` (used by the ACME sidecar and the
+containers), TURN credentials, and `ENABLE_EKT_SERVER`.
+
 ## Quick start
 
 ```bash
@@ -103,7 +121,8 @@ verification steps.
 git clone https://github.com/TeleCrypt-io/flexisip-docker.git
 cd flexisip-docker
 
-# 2. Edit the config files (already in the repo)
+# 2. Edit the local config files (already in the repo)
+# These are local files you own — mounted from the host into the containers.
 # Replace <SIP_IP> with your server's public IP in:
 #   config/flexisip.conf
 #   config/flexisip-conference.conf

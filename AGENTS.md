@@ -11,6 +11,22 @@ Not a source code repository. Delivers:
 Both images are built from upstream source and published to GHCR. Bonus `.deb`
 packages are published to GitHub Releases (not consumed by Docker).
 
+## Configuration model — configs are local and edited locally
+
+`config/flexisip.conf`, `config/flexisip-conference.conf`, and `config/users.conf`
+are **local files** mounted from the host. They are intended to be edited on the
+deployment server — that is by design, not a workaround.
+
+- The repo ships them **ready-to-use** with E2EE-capable defaults and a single
+  `<SIP_IP>` placeholder; the deployer substitutes their public IP locally.
+- **IP and domain management is deliberately local.** The entrypoints do **not**
+  perform `<SIP_IP>` substitution at runtime (this was considered and rejected:
+  configs are local files the operator owns). Do not "fix" this by adding in-container
+  templating — it contradicts the supported deployment model.
+- `.env` carries only environment-level values (`SIP_IP` for the ACME sidecar and
+  containers, TURN credentials, `ENABLE_EKT_SERVER`). Everything else stays in the
+  local config files.
+
 ## Workflow trigger rules
 
 `.github/workflows/build.yml` only fires on changes to:
