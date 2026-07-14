@@ -39,14 +39,19 @@ services:
       - -c
       - |
         set -e
+        # goacme/lego image ships lego at /lego (not in PATH). Symlink it in.
+        ln -sf /lego /usr/bin/lego 2>/dev/null || true
         IP="$${SIP_IP:?SIP_IP is required}"
         DIR=/etc/lego
         CERT_DIR=/certs
 
         # ── Initial certificate request ──────────────────────────────────
+        # IP-address certificates require the "shortlived" profile at Let's Encrypt
+        # (https://letsencrypt.org/2026/01/15/6day-and-ip-general-availability).
+        # Certs are valid ~6 days; the renewal loop below renews automatically.
         fetch_cert() {
           echo "==> Requesting IP certificate for $$IP ..."
-          lego run \
+          lego run --profile shortlived \
             --accept-tos \
             --http \
             --http.address ":80" \
@@ -62,7 +67,7 @@ services:
         # ── Renewal loop ─────────────────────────────────────────────────
         renew_cert() {
           echo "==> Attempting renewal for $$IP ..."
-          lego run \
+          lego run --profile shortlived \
             --accept-tos \
             --http \
             --http.address ":80" \
@@ -230,8 +235,10 @@ services:
       --no-tls
       --no-dtls
     healthcheck:
-      # UDP check on the STUN/TURN listener.
-      test: ["CMD-SHELL", "nc -z -u 127.0.0.1 3478"]
+      # UDP probe on the STUN/TURN listener. The coturn/coturn:4.6 image
+      # does not ship nc/curl/wget, so use bash's /dev/udp built-in.
+      # (CMD-SHELL uses /bin/sh which lacks /dev/udp; use bash explicitly.)
+      test: ["CMD", "bash", "-c", "echo > /dev/udp/127.0.0.1/3478"]
       interval: 30s
       timeout: 5s
       retries: 5
