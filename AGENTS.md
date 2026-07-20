@@ -11,10 +11,44 @@ Not a source code repository. Delivers:
 Both images are built from upstream source and published to GHCR. Bonus `.deb`
 packages are published to GitHub Releases (not consumed by Docker).
 
-## ⚠️ Do NOT clone this repo onto a deployment server — COPY the files
+## ⚠️ The deployment server NEVER connects to this repository
 
-**Rule: never `git clone` this repository onto a production host. Copy only
-the files you need.**
+**This is the designed flow, not a hardening tip. A deployed server has no
+connection to this repo — none, at any point, in either direction.**
+
+```
+1. On the machine doing the deploying: read this AGENTS.md.
+2. COPY docker-compose.yml and the config files onto the server.
+3. Fill in credentials locally on the server, and start the stack.
+```
+
+That is the whole flow. There is **no clone, no remote, no fetch, no pull,
+and no push** on a deployment host. If a deployed server has a `.git`
+directory pointing at this repository, **that is an error to be corrected**,
+not a supported configuration.
+
+**Do not** "clone and remove the remote", "clone shallow", or "clone then
+gitignore" — those all still produce a git working tree on a production host,
+which is the thing this rule exists to prevent. Copy the files.
+
+**Why this matters.** Config files are edited **in place on the server** and
+hold real secrets — TURN credentials in `.env`, HA1 password hashes in
+`config/users.conf`. Inside a clone, those live in a working tree attached to
+a remote pointing at this **public** repository. On a live deployment they
+were found **staged in the index** — one `git commit -a && git push` from
+publication. An automated agent following a routine "commit your work"
+convention would do exactly that, having no way to tell this repo from a
+private one.
+
+`.env` and `config/users.conf` are now untracked and gitignored, which
+removes the largest hazard. **The no-connection rule still stands**, because
+a working tree can still be pushed to and `git add -f` re-opens the hole.
+
+**Updates are deliberate re-copies.** Without a clone there is no `git pull`.
+Fetch the new file, diff it against what is running, and copy it across on
+purpose. This is a feature, not a limitation: a `git pull` can silently
+revert a local security fix (see "Config drift" below), and updates are far
+rarer than credential edits.
 
 **Why.** The deployment model has operators edit config files **in place** on
 the server. In a clone, that working tree is attached to `.git` with a remote
@@ -49,13 +83,17 @@ edits first. That is the intended trade-off: updates are rarer than
 credential edits, and a deliberate diff is safer than a pull that could
 revert a local security fix (see "Config drift" below).
 
-**Middle path,** if you want easy updates: clone, then immediately
-`git remote remove origin`. Updates become "add the remote, fetch, diff,
-remove the remote again" — deliberate, with no standing push target.
-
 **Never** commit real credentials to this repo. If it happens, treat the
 credentials as compromised: rotate TURN credentials and every user password
 (HA1 hashes are offline-crackable), then purge the history.
+
+**If you find a clone on a deployment host**, correct it:
+```bash
+cp -a .env .env.bak && cp -a config/users.conf config/users.conf.bak  # back up first
+rm -rf .git          # detach from the repo entirely; files and stack keep running
+```
+Removing `.git` does not touch the running containers or the config files —
+it only severs the repository connection that should never have existed.
 
 ## Config drift — server-local edits are silently reverted by updates
 
@@ -107,6 +145,72 @@ re-discovered the hard way. **Full detail in [`SECURITY.md`](SECURITY.md).**
 - **`180 Ringing` → `408 Request Timeout` is ambiguous.** It is the
   signature of both an unanswered call and a push-notification failure. Logs
   cannot distinguish them; only a deliberate answered-call test can.
+
+## Presence: this stack ships NONE — turn it off in clients
+
+**This stack runs no presence server.** There is no `flexisip-presence`
+service in `docker-compose.yml`, and the `[presence-server]` block in
+`config/flexisip.conf` does **not** start one (it only suppresses a
+deprecation warning — see the comment there).
+
+**Consequence if you leave clients as-shipped:** they attempt presence
+anyway, and **show meaningless status** — contacts stuck "offline" or
+"unknown", because their `PUBLISH` has no server to reach and their
+`SUBSCRIBE` goes to Belledonne's public RLS (which refuses it). The UI
+implies a working feature that does not exist.
+
+**Pick one. Do not leave it ambiguous — that is the current, wrong state.**
+
+### Option A — turn presence off in clients (recommended)
+
+Simplest, and it also removes the phone-home leak at the source, because
+clients stop generating presence traffic entirely.
+
+In the provisioning XML / `linphonerc`, in the **per-account** section
+(`proxy_0`, `proxy_1`, … — one per account, **not** the global `[sip]`
+section):
+
+```ini
+[proxy_0]
+publish=0
+```
+
+`publish=0` is **verified**: it is what liblinphone itself writes into a
+generated client config, in the `[proxy_N]` section. It is also liblinphone's
+default, so the failure mode is a client that had presence explicitly
+enabled, or a UI that offers a presence toggle.
+
+Additionally, prevent the client from subscribing to Belledonne's resource
+list. The relevant setting is the **RLS URI** in the global `[sip]` section
+(clients ship a built-in default of `sips:rls@sip.linphone.org`; recent
+Linphone Desktop exposes an explicit option to disable it).
+
+⚠️ **The exact RLS key name is NOT verified.** It is absent from generated
+client configs (built-in defaults are not written out), and liblinphone's
+published provisioning-key reference is explicitly incomplete ("this page is
+under construction"). **Do not guess** — an unrecognised key is **silently
+ignored**, which looks like a fix while the client still leaks. Confirm
+against the config reference for your client version, then **verify
+empirically**:
+
+```bash
+# After re-provisioning ONE client, confirm nothing egresses:
+docker logs --since 10m flexisip-proxy 2>&1 | grep 'Sending SIP request' \
+  | grep -oE 'to sips?:[^ ]+@[^ ]+' | grep -v '<SIP_IP>' | sort | uniq -c
+```
+Expect **zero** external targets. That test is authoritative regardless of
+which key name turned out to be correct.
+
+### Option B — actually run a presence server
+
+If you want working presence, add Belledonne's `flexisip-presence` service to
+the stack and point clients at it. That is a real feature addition — a new
+service, its own config and datastore — **not** a config toggle, and this
+repo does not currently ship it.
+
+Either way, **leave the `[presence-server]` block in `config/flexisip.conf`
+alone**: deleting it removes no functionality and only restores a startup
+deprecation warning.
 
 ## Configuration model — configs are local and edited locally
 

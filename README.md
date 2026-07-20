@@ -116,24 +116,24 @@ containers), TURN credentials, and `ENABLE_EKT_SERVER`.
 
 ## Quick start
 
-> ⚠️ **Do NOT clone this repo onto your deployment server — copy the files.**
-> You edit config files in place on the server, so a clone leaves real
-> secrets (TURN credentials, HA1 hashes) in a working tree attached to a
-> remote pointing at this **public** repo — one `git commit -a && git push`
-> from publishing them. `.env` and `config/users.conf` are untracked and
-> gitignored, which removes the main hazard, but copy-don't-clone remains
-> the rule. Details and a middle path in [`AGENTS.md`](AGENTS.md).
+> ⚠️ **The deployment server never connects to this repository.** You COPY
+> the files onto it — there is no clone, no remote, no pull, no push. Config
+> files are edited in place on the server and hold real secrets (TURN
+> credentials, HA1 hashes); inside a clone those sit in a working tree
+> attached to a remote pointing at this **public** repo. Do not "clone and
+> remove the remote" either — that still leaves a git tree on a production
+> host. Full rationale in [`AGENTS.md`](AGENTS.md).
 
 ```bash
-# 1. Get the files onto the server WITHOUT cloning.
-#    Download a tarball and extract only what you need:
+# 1. Get the files onto the server. NO git — extract only what you need:
 curl -fsSL https://github.com/TeleCrypt-io/flexisip-docker/archive/refs/heads/main.tar.gz \
   | tar xz --strip-components=1 \
       flexisip-docker-main/docker-compose.yml \
       flexisip-docker-main/versions.env \
       flexisip-docker-main/config \
       flexisip-docker-main/.env.example
-#    (If you do clone for convenience, immediately: git remote remove origin)
+#    Updates later = fetch the new file, diff against what is running, copy
+#    it across deliberately. There is no `git pull` in this model.
 
 # 2. Create your live credential files from the examples.
 #    These two are gitignored and must NEVER be committed anywhere.
