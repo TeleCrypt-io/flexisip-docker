@@ -1,0 +1,25 @@
+# Custom /etc/hosts bind-mounted into the proxy and conference containers.
+#
+# Why this exists: stock Linphone clients default to Belledonne's PUBLIC
+# resource-list server (sips:rls@sip.linphone.org) for the friends list. The
+# proxy forwards those SUBSCRIBEs out, leaking account existence, online
+# status, server IP and timing to a third party.
+#
+# Why a bind-mount rather than extra_hosts or the host's /etc/hosts:
+#   - the host's /etc/hosts does NOT reach containers (Docker generates its own)
+#   - compose extra_hosts silently DROPS IPv6 entries (bracketed or otherwise)
+#   - an IPv4-only entry does NOT suppress the AAAA lookup: glibc still falls
+#     through to DNS and returns the real IPv6 address (verified)
+# Both families must therefore be pinned here explicitly.
+#
+# 0.0.0.0 and 100:: (RFC 6666 discard-only) are unroutable as destinations, so
+# connections fail fast. Do NOT use 127.0.0.1/::1 - the proxy listens on 5061
+# and would receive its own out-of-domain SUBSCRIBE.
+
+127.0.0.1	localhost
+::1		localhost ip6-localhost ip6-loopback
+ff02::1		ip6-allnodes
+ff02::2		ip6-allrouters
+
+0.0.0.0		sip.linphone.org sip11.linphone.org
+100::		sip.linphone.org sip11.linphone.org

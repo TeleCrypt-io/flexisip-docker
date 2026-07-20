@@ -198,6 +198,9 @@ on calls, registration, conferencing, or E2EE.
    Validate in a throwaway container against the configuration reference for
    your exact Flexisip version before using it.
 
+   ⚠️ **This is the only reliable fix.** See the correction below: the
+   obvious client-side lever (`publish=0`) does **not** stop this leak.
+
 2. **Client-side provisioning override** — set the RLS/presence URI
    explicitly so clients never point at Belledonne. Confirm the exact key
    against the Linphone SDK config reference for your client version: an
@@ -207,6 +210,31 @@ on calls, registration, conferencing, or E2EE.
 3. **Stopgap** — blackhole the hostname (`/etc/hosts`) or drop the egress in
    the firewall. Instant and reversible; stops traffic *leaving* but not
    clients generating it.
+
+### ⚠️ `publish=0` does NOT fix this leak — verified
+
+Disabling presence publication is the obvious first guess. **It does not
+work**, because `PUBLISH` and the RLS `SUBSCRIBE` are independent:
+
+| Mechanism | Method | Controlled by | Goes to |
+|---|---|---|---|
+| Presence publication | `PUBLISH` | `publish=0` in `[proxy_N]` | your own domain |
+| Resource/friends list | `SUBSCRIBE` | **RLS URI** (a different key) | `sips:rls@sip.linphone.org` |
+
+**Evidence from a live deployment:** provisioning XMLs carried `publish=0`
+from 2026-07-17; the proxy still egressed `SUBSCRIBE` to
+`sips:rls@sip.linphone.org` on 2026-07-18 and 2026-07-20. The leak ran for
+days *with presence publication already disabled*.
+
+Two things follow, and both matter:
+
+1. **The server-side routing restriction is the only reliable fix.** The
+   client-side path depends on the RLS-URI key, which remains unverified —
+   so it cannot be *assumed* to work either.
+2. **Never infer that a leak is fixed from a config setting.** Only the
+   egress sweep proves it, and only while a client is actually registered —
+   with no clients connected the sweep reads clean whether or not the leak
+   exists. Check the sweep *with a client online*.
 
 **Note:** the `[presence-server]` block in `config/flexisip.conf` is
 unrelated to this leak. It runs no presence server — it only suppresses a

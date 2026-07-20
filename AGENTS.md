@@ -156,8 +156,28 @@ deployments that genuinely want presence.
 
 ### Option A — turn presence off in clients (CHOSEN DEFAULT)
 
-Simplest, and it also removes the phone-home leak at the source, because
-clients stop generating presence traffic entirely.
+Simplest way to stop clients displaying meaningless presence status.
+
+> ⚠️ **CORRECTION (verified on a live deployment 2026-07-20): `publish=0`
+> does NOT stop the phone-home leak.** An earlier version of this section
+> claimed it did. That was wrong.
+>
+> `publish` and the RLS subscription are **independent mechanisms**:
+>
+> | Mechanism | Method | Controlled by | Destination |
+> |---|---|---|---|
+> | Presence publication | `PUBLISH` | `publish=0` in `[proxy_N]` | your own domain |
+> | Resource/friends list | `SUBSCRIBE` | **RLS URI** (separate key) | `sips:rls@sip.linphone.org` |
+>
+> **Evidence:** on a live server the provisioning XMLs carried
+> `publish=0` from 2026-07-17, and the proxy still egressed `SUBSCRIBE` to
+> `sips:rls@sip.linphone.org` on 2026-07-18 and again on 2026-07-20.
+> Turning off `publish` demonstrably left the leak running.
+>
+> **Consequence:** the **server-side out-of-domain routing restriction is
+> the only reliable fix** — and it is the one this repo does not ship
+> because its syntax is unverified (see `SECURITY.md`). Do not treat
+> `publish=0` as leak remediation. The egress sweep is the only arbiter.
 
 In the provisioning XML / `linphonerc`, in the **per-account** section
 (`proxy_0`, `proxy_1`, … — one per account, **not** the global `[sip]`
