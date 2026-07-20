@@ -87,14 +87,6 @@ revert a local security fix (see "Config drift" below).
 credentials as compromised: rotate TURN credentials and every user password
 (HA1 hashes are offline-crackable), then purge the history.
 
-**If you find a clone on a deployment host**, correct it:
-```bash
-cp -a .env .env.bak && cp -a config/users.conf config/users.conf.bak  # back up first
-rm -rf .git          # detach from the repo entirely; files and stack keep running
-```
-Removing `.git` does not touch the running containers or the config files —
-it only severs the repository connection that should never have existed.
-
 ## Config drift — server-local edits are silently reverted by updates
 
 Security and reliability fixes applied **only on a server** are lost the next
@@ -159,9 +151,10 @@ anyway, and **show meaningless status** — contacts stuck "offline" or
 `SUBSCRIBE` goes to Belledonne's public RLS (which refuses it). The UI
 implies a working feature that does not exist.
 
-**Pick one. Do not leave it ambiguous — that is the current, wrong state.**
+**Option A is this project's chosen default.** Option B is documented for
+deployments that genuinely want presence.
 
-### Option A — turn presence off in clients (recommended)
+### Option A — turn presence off in clients (CHOSEN DEFAULT)
 
 Simplest, and it also removes the phone-home leak at the source, because
 clients stop generating presence traffic entirely.
