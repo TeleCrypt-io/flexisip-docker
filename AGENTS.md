@@ -214,10 +214,49 @@ docker logs --since 10m flexisip-proxy 2>&1 | grep 'Sending SIP request' \
 Expect **zero** external targets. That test is authoritative regardless of
 which key name turned out to be correct.
 
-### Research findings — presence is already vestigial in modern Linphone
+### Research findings — presence: documentation vs. observed reality
 
-Investigated 2026-07-20. **This materially changes the recommendation: do
-not add a presence server.**
+Investigated 2026-07-20.
+
+> 🚨 **FIELD EVIDENCE CONTRADICTS THE DESK RESEARCH BELOW. READ THIS FIRST.**
+>
+> An operator reported — with screenshots, on a latest-version mobile app —
+> that **one user could see another user's online status**. Presence is
+> therefore **demonstrably working** on a deployment that has:
+> no presence server, `publish=0` set on every account, and (now) Belledonne's
+> RLS blackholed.
+>
+> The conclusion below ("presence is vestigial, cannot be surfaced") is
+> **wrong as a statement about observed behaviour.** The individual findings
+> about SIP SIMPLE, the missing Desktop UI and the RLS URI still hold, but
+> they clearly do **not** describe every path by which a Linphone client can
+> obtain and display presence.
+>
+> **Most likely actual mechanism — peer-to-peer presence (RFC 3856), not a
+> server:** client A sends `SUBSCRIBE` directly to B's AOR, the proxy routes
+> it to B's registered contact like any other request, and B's client answers
+> with `NOTIFY`. This needs **no presence server and no Belledonne** — only a
+> proxy willing to route `SUBSCRIBE` between local users, which
+> `[module::Forward]`/`[module::Router]` does by default. Note `publish=0`
+> does not prevent it: `publish` governs *publishing to a presence server*,
+> while a notifier answering a direct `SUBSCRIBE` is a separate path.
+>
+> **UNVERIFIED** — the mechanism above is inference, not observation. It must
+> be confirmed by capturing `SUBSCRIBE`/`NOTIFY` between two local accounts
+> with clients actually registered:
+> ```bash
+> docker logs --since 30m flexisip-proxy 2>&1 \
+>   | grep -E 'SUBSCRIBE|NOTIFY' | grep -v linphone.org
+> ```
+> **If confirmed, disabling presence is a SERVER-side change** (stop routing
+> the presence event package between users) — not a provisioning key, and not
+> a presence server. Do not act on the desk research below until this is
+> observed.
+
+---
+
+**Desk research (documentation-based — see the correction above before
+relying on any of it):**
 
 1. **Linphone 5.x+ dropped SIP SIMPLE presence entirely.** It no longer
    speaks the `PUBLISH`/`SUBSCRIBE` presence model that a
