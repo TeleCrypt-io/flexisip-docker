@@ -214,6 +214,55 @@ docker logs --since 10m flexisip-proxy 2>&1 | grep 'Sending SIP request' \
 Expect **zero** external targets. That test is authoritative regardless of
 which key name turned out to be correct.
 
+### Research findings — presence is already vestigial in modern Linphone
+
+Investigated 2026-07-20. **This materially changes the recommendation: do
+not add a presence server.**
+
+1. **Linphone 5.x+ dropped SIP SIMPLE presence entirely.** It no longer
+   speaks the `PUBLISH`/`SUBSCRIBE` presence model that a
+   `flexisip-presence` server implements; it uses RFC 4662 Resource Lists
+   (RLS) instead. A presence server would therefore serve a protocol modern
+   clients have stopped using.
+
+2. **Linphone Desktop has had no UI to enable per-contact presence since
+   v4.** The capability survives in the codebase but has no user-facing
+   control (upstream issue linphone-desktop#84, closed as invalid). Users
+   cannot turn presence display on even if a server provides it.
+
+3. **Belledonne treat "self-hosted account pointed at our RLS" as a bug and
+   have fixed it.** linphone-android MR !795 prevents the friends-list RLS
+   URI being set for non-`sip.linphone.org` accounts, and MR !2516 removes
+   it from the default RC with migration code stripping it from existing
+   Core and FriendList state. **Upgrading clients may remove the phone-home
+   at source**, with no provisioning change at all.
+
+4. **The RLS URI is a client BUILT-IN default, not provisioning.** Verified
+   on a live deployment: the provisioning XMLs contain no `rls`, `presence`
+   or `subscribe` keys whatsoever, yet clients still subscribed to
+   `sips:rls@sip.linphone.org`.
+
+5. **The official provisioning-key reference does not document presence
+   keys at all** — it states it is "under construction". So there is no
+   authoritative key name to set, and guessing one is unsafe because an
+   unrecognised key is silently ignored.
+
+**Practical conclusion.** For a self-hosted deployment on modern clients,
+presence is effectively **already off**: there is no server, no supported
+protocol, and no client UI. What remains is the client's *attempt* to reach
+Belledonne's RLS — a leak, not a feature — and that is handled at the
+network layer by `config/hosts` (see SECURITY.md).
+
+If contacts display as "offline" or with no status, that is the **expected**
+result of having no presence data, not a misconfiguration to fix.
+
+**Preferred remediation order:**
+1. Keep the `config/hosts` blackhole (stops the leak regardless of client).
+2. Upgrade clients — recent versions strip the RLS URI for non-Belledonne
+   accounts by themselves.
+3. Only then consider provisioning overrides, and verify empirically with
+   the egress sweep, since no key name is authoritatively documented.
+
 ### Option B — actually run a presence server
 
 If you want working presence, add Belledonne's `flexisip-presence` service to
