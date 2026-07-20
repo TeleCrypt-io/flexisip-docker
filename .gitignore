@@ -25,3 +25,17 @@ certs/
 # OS
 .DS_Store
 Thumbs.db
+
+# ---------------------------------------------------------------------------
+# Live credential files — NEVER tracked.
+#
+# These are created by the operator by copying the .example versions, and they
+# hold real secrets: TURN credentials in .env, and HA1 password hashes in
+# config/users.conf. They were tracked until 2026-07; that meant every
+# deployment accumulated real credentials in a file git considered part of
+# THIS PUBLIC REPO, one `git commit -a && git push` away from publication.
+#
+# Do not remove these ignores. Do not `git add -f` these paths.
+# ---------------------------------------------------------------------------
+.env
+config/users.conf
