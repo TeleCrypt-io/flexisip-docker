@@ -11,6 +11,103 @@ Not a source code repository. Delivers:
 Both images are built from upstream source and published to GHCR. Bonus `.deb`
 packages are published to GitHub Releases (not consumed by Docker).
 
+## ⚠️ Do NOT clone this repo onto a deployment server — COPY the files
+
+**Rule: never `git clone` this repository onto a production host. Copy only
+the files you need.**
+
+**Why.** The deployment model has operators edit config files **in place** on
+the server. In a clone, that working tree is attached to `.git` with a remote
+pointing at this **public** repository. Real secrets — TURN credentials in
+`.env`, HA1 password hashes in `config/users.conf` — then sit in a working
+tree one `git commit -a && git push` from publication. On a live deployment
+these were found **staged in the index**, which is one command from the same
+outcome. An automated agent following a "commit your work" convention would
+do exactly that, having no way to tell this repo from a private one.
+
+`.env` and `config/users.conf` are now **untracked and gitignored** (they ship
+as `.env.example` / `config/users.conf.example`), which removes the primary
+hazard. **The copy-don't-clone rule still stands** as defence in depth: a
+clone can still be pushed to, and `git add -f` or a future tracked file
+re-opens the hole.
+
+**What to copy** onto the server:
+
+```
+docker-compose.yml
+versions.env
+config/flexisip.conf
+config/flexisip-conference.conf
+config/domain-registrations.conf
+.env.example              -> rename to .env,               then fill in + chmod 600
+config/users.conf.example -> rename to config/users.conf,  then fill in + chmod 600
+```
+
+**Consequence — updates become manual.** Without a clone there is no
+`git pull`; re-copy changed files deliberately and diff against your local
+edits first. That is the intended trade-off: updates are rarer than
+credential edits, and a deliberate diff is safer than a pull that could
+revert a local security fix (see "Config drift" below).
+
+**Middle path,** if you want easy updates: clone, then immediately
+`git remote remove origin`. Updates become "add the remote, fetch, diff,
+remove the remote again" — deliberate, with no standing push target.
+
+**Never** commit real credentials to this repo. If it happens, treat the
+credentials as compromised: rotate TURN credentials and every user password
+(HA1 hashes are offline-crackable), then purge the history.
+
+## Config drift — server-local edits are silently reverted by updates
+
+Security and reliability fixes applied **only on a server** are lost the next
+time the repo is updated. Observed on a live deployment: a fix binding SIP
+UDP to loopback existed on the server for days but never upstream, so any
+`git pull` would have silently re-exposed the unencrypted transport.
+
+**Rule:** a change that is *security-relevant* or *generally correct* belongs
+**upstream in this repo**, not in a local edit. Sanctioned local edits are
+only: `<SIP_IP>` substitution, real credentials, and `.env` values. Anything
+else is an upstream change. Before any update, diff the local config files
+first.
+
+## Findings from live-deployment review (2026-07)
+
+Discovered while operating a real deployment. Recorded here so they are not
+re-discovered the hard way. **Full detail in [`SECURITY.md`](SECURITY.md).**
+
+- **Presence phones home to Belledonne.** Stock Linphone clients default to
+  `sips:rls@sip.linphone.org` for presence, and an unrestricted
+  `[module::Forward]` routes those subscriptions **out to the public
+  Internet** — leaking account existence, online status, server IP and
+  timing. Confirmed live via an established TLS connection to
+  `sip11.linphone.org:5061`. **This contradicts the premise of a
+  self-hosted deployment.** It is easy to dismiss as log noise. Detection
+  commands and mitigations are in `SECURITY.md`; cutting it costs **zero**
+  functionality because the subscriptions already fail with `404`.
+- **E2EE does not cover metadata.** `log-level=message` retains
+  who-called-whom records. Say "end-to-end encrypted media", not "we keep no
+  records", unless you configured it that way.
+- **`[module::DoSProtection]` disabled means fail2ban is REQUIRED**, not
+  optional. Without it there is no rate limiting at any layer.
+- **`[presence-server]` and `[module::Authorization]` blocks look like
+  functional config but are warning suppressors.** Neither enables anything;
+  deleting them removes no functionality and only restores log noise. Read
+  the comment above a block before "cleaning it up."
+- **`[module::MediaRelay]` does not weaken E2EE** — it forwards ZRTP
+  ciphertext it cannot read. It is a CPU/bandwidth concern, not a
+  confidentiality one.
+- **Default datastore credentials ship weak on purpose** (MariaDB
+  `flexisip`, Redis unauthenticated) and must be changed by an operator
+  procedure — the no-runtime-substitution model means this repo cannot
+  safely ship changed values. See `SECURITY.md`.
+- **Beware `grep -c '503'` on proxy logs.** It massively overcounts —
+  `503` appears inside connection IDs and dialled numbers. Grep
+  `'503 Service Unavailable'`. On one deployment the naive count read 1533
+  against 130 real occurrences.
+- **`180 Ringing` → `408 Request Timeout` is ambiguous.** It is the
+  signature of both an unanswered call and a push-notification failure. Logs
+  cannot distinguish them; only a deliberate answered-call test can.
+
 ## Configuration model — configs are local and edited locally
 
 `config/flexisip.conf`, `config/flexisip-conference.conf`, and `config/users.conf`

@@ -116,12 +116,32 @@ containers), TURN credentials, and `ENABLE_EKT_SERVER`.
 
 ## Quick start
 
-```bash
-# 1. Clone this repo
-git clone https://github.com/TeleCrypt-io/flexisip-docker.git
-cd flexisip-docker
+> ⚠️ **Do NOT clone this repo onto your deployment server — copy the files.**
+> You edit config files in place on the server, so a clone leaves real
+> secrets (TURN credentials, HA1 hashes) in a working tree attached to a
+> remote pointing at this **public** repo — one `git commit -a && git push`
+> from publishing them. `.env` and `config/users.conf` are untracked and
+> gitignored, which removes the main hazard, but copy-don't-clone remains
+> the rule. Details and a middle path in [`AGENTS.md`](AGENTS.md).
 
-# 2. Edit the local config files (already in the repo)
+```bash
+# 1. Get the files onto the server WITHOUT cloning.
+#    Download a tarball and extract only what you need:
+curl -fsSL https://github.com/TeleCrypt-io/flexisip-docker/archive/refs/heads/main.tar.gz \
+  | tar xz --strip-components=1 \
+      flexisip-docker-main/docker-compose.yml \
+      flexisip-docker-main/versions.env \
+      flexisip-docker-main/config \
+      flexisip-docker-main/.env.example
+#    (If you do clone for convenience, immediately: git remote remove origin)
+
+# 2. Create your live credential files from the examples.
+#    These two are gitignored and must NEVER be committed anywhere.
+cp .env.example .env
+cp config/users.conf.example config/users.conf
+chmod 600 .env config/users.conf
+
+# 3. Edit the local config files
 # These are local files you own — mounted from the host into the containers.
 # Replace <SIP_IP> with your server's public IP in:
 #   config/flexisip.conf
@@ -135,10 +155,10 @@ cd flexisip-docker
 # Supported algorithms: clrtxt, md5, sha256. The " ;" terminator is mandatory.
 # Example:  version:1\n  test@203.0.113.10 clrtxt:test1234 ;
 
-# 3. Edit .env (already in the repo)
+# 4. Edit .env (created from .env.example in step 2)
 # Set SIP_IP, TURN credentials
 
-# 4. Pull and start (port 80 must be reachable for ACME challenge)
+# 5. Pull and start (port 80 must be reachable for ACME challenge)
 docker compose pull
 docker compose up -d
 docker compose logs -f acme proxy conference
@@ -163,8 +183,11 @@ docker compose up -d
 
 - **Transports:** flexisip 2.6 accepts only `sip:` (UDP) and `sips:` (TLS)
   prefixes in `transports`. A `tcp:` prefix crashes the proxy. The proxy is
-  configured with both `sips:0.0.0.0:5061` (client TLS) and
-  `sip:0.0.0.0:5060` (internal hop to the conference server's UDP contact).
+  configured with `sips:0.0.0.0:5061` (client TLS) and
+  **`sip:127.0.0.1:5060`** — the UDP transport is bound to **loopback**,
+  because it exists only for the internal hop to the conference server's UDP
+  contact. Binding it to `0.0.0.0` would expose an unencrypted SIP transport
+  to the Internet. Do not widen it.
 - **Conference server is on host networking** (`network_mode: host`). It binds
   `127.0.0.1:6064` and the host-networked proxy reaches it via loopback. Under
   host networking Docker service names don't resolve, so its MariaDB/Redis point

@@ -121,6 +121,159 @@ negotiation has not completed for all participants.
 - **Replay / reordering:** handled by SRTP sequence numbers inside the
   EKT-protected inner SRTP.
 
+## What E2EE does NOT protect: metadata
+
+**E2EE here protects call *content*. It does not protect *metadata* — who
+called whom, when, for how long, from which IP.** For many threat models
+(journalists, activists, anyone facing traffic analysis) the social graph
+plus timestamps is more revealing than the audio. Do not let "E2EE" be read
+as "the server knows nothing."
+
+The media property above remains true and is verifiable: the server forwards
+ciphertext it holds no key for. It is simply **narrower than "private."**
+
+Two concrete metadata exposures ship with this stack by default:
+
+### 1. Signaling logs at rest
+
+Both configs default to `log-level=message`, which records REGISTER/INVITE
+traffic — accounts, call pairs, timing, contact IPs — retained via Docker
+json-file rotation (`max-size` × `max-file` per container, potentially
+gigabytes). A disk image, host compromise, or lawful request yields call
+records.
+
+**Decide and document a retention posture.** For production, consider
+`log-level=warning`. Note the trade-off honestly: several diagnostics in the
+troubleshooting docs grep for `401`/`503` patterns that `message` provides.
+Lowering the level is a real trade-off, not a free win.
+
+### 2. Presence phones home to Belledonne
+
+**Stock Linphone clients default to Belledonne's PUBLIC resource-list server
+for presence** (`sips:rls@sip.linphone.org`). With an unrestricted
+`[module::Forward]`, a self-hosted proxy will **route those subscriptions
+out to the public Internet**, disclosing to a third party: that a given
+account exists on your server, that it is online, your server's public IP,
+and presence timing.
+
+This was observed on a live self-hosted deployment (2026-07-20): an
+established TLS connection from the proxy to `sip11.linphone.org:5061`,
+carrying `SUBSCRIBE` to `sips:rls@sip.linphone.org`. The requests are
+refused with `404` — **but the metadata is in the request, so the refusal
+does not undo the disclosure.**
+
+**It is easy to miss**, because presence errors look like ordinary log noise
+and get dismissed as a client quirk.
+
+**Detect (any non-local peer or target is a leak):**
+```bash
+# Every out-of-domain target the proxy actually SENDS (not merely receives):
+docker logs flexisip-proxy 2>&1 | grep 'Sending SIP request' \
+  | grep -oE 'to sips?:[^ ]+@[^ ]+' | grep -v '<SIP_IP>' | sort | uniq -c
+
+# Live outbound SIP connections:
+ss -tn state established | grep 5061
+getent hosts <peer-ip>        # confirm whose infrastructure it is
+```
+
+**Cutting it costs nothing.** These subscriptions already fail with `404`,
+so no working feature depends on them. Removing the disclosure has no impact
+on calls, registration, conferencing, or E2EE.
+
+**Mitigations, in order of durability:**
+
+1. **Server-side out-of-domain routing restriction — the durable control.**
+   It holds regardless of client configuration, so a reinstalled or
+   re-provisioned client cannot reintroduce the leak.
+
+   Flexisip modules accept a generic `filter=` expression, and
+   `request.uri.domain == '...'` is valid filter syntax, so restricting
+   `[module::Forward]` to the local domain is the natural lever.
+
+   ⚠️ **NOT SHIPPED IN THIS REPO, AND DELIBERATELY SO.** The exact
+   expression is **unverified on this stack**, and the behaviour of
+   *non-matching* requests (clean rejection vs. silent timeout) has not been
+   established. Flexisip rejects unknown parameters **at startup**, so a
+   wrong value means the proxy does not boot and all SIP service stops.
+   Validate in a throwaway container against the configuration reference for
+   your exact Flexisip version before using it.
+
+2. **Client-side provisioning override** — set the RLS/presence URI
+   explicitly so clients never point at Belledonne. Confirm the exact key
+   against the Linphone SDK config reference for your client version: an
+   **unrecognised key is silently ignored**, which looks like a fix while
+   still leaking. Verify with the detection commands above.
+
+3. **Stopgap** — blackhole the hostname (`/etc/hosts`) or drop the egress in
+   the firewall. Instant and reversible; stops traffic *leaving* but not
+   clients generating it.
+
+**Note:** the `[presence-server]` block in `config/flexisip.conf` is
+unrelated to this leak. It runs no presence server — it only suppresses a
+deprecation warning. Deleting it does **not** fix the phone-home.
+
+### Related: verify you are not an open relay
+
+The same sweep is a toll-fraud regression check. Internet scanners probe SIP
+proxies with premium-rate numbers under many dial prefixes (e.g.
+`00<number>`, `9011<number>`, `900<number>`). On a correctly authenticating
+proxy these appear **only** in *received* requests, never in `Sending SIP
+request` lines. **If a phone number ever appears in the "Sending" list, you
+have an open relay and a financial emergency.**
+
+## Required hardening the shipped config assumes
+
+These are **not optional extras** — the shipped configuration actively
+depends on them.
+
+- **fail2ban (or equivalent) is REQUIRED.** `[module::DoSProtection]` is
+  disabled in this stack because the in-container iptables-based module
+  cannot work under Docker; the config delegates rate limiting to an
+  external control. If you skip it there is **no rate limiting at any
+  layer** — one live deployment accumulated ~50,000 `401 Unauthorized`
+  scanner hits this way.
+- **A host firewall.** Containers publish to loopback where possible, but
+  the host itself needs an INPUT policy. Sequence firewall changes
+  carefully on remote hosts: add loopback, `ESTABLISHED,RELATED`, and your
+  SSH rule *before* setting a default DROP, and verify from a second
+  session.
+- **Check the *effective* SSH config, not the file.** Cloud-init images
+  frequently override `PasswordAuthentication no` via
+  `/etc/ssh/sshd_config.d/*.conf`, and the **first** directive wins.
+  Verify with `sshd -T | grep -E 'passwordauthentication|permitrootlogin'`,
+  and check whether root's password is set (`passwd -S root` → `P` means
+  set, `L` means locked).
+- **Restrict the credential files:** `chmod 600 .env config/users.conf`.
+  HA1 hashes are not plaintext passwords but are offline-crackable.
+- **Change the default database credentials.** See "Default credentials"
+  below.
+
+## Default credentials — change these
+
+This stack ships **default, guessable** datastore credentials so it starts
+out of the box:
+
+- MariaDB root and application passwords are both the literal string
+  `flexisip` (`docker-compose.yml`, and the conference server's
+  `database-connection-string`).
+- Redis runs with **no authentication** (`redis-auth-password` is commented
+  out in the conference config).
+
+Both are published to `127.0.0.1` only, which is the mitigation. But the
+proxy and conference containers run with `network_mode: host`, so **any
+host process or host-networked container can reach them without
+credentials**, and a container escape or SIP-parser exploit reaches them
+immediately. Redis holds all SIP registrations and can be used to
+manipulate call routing.
+
+⚠️ **Changing these is a deliberate operator procedure, not a `git pull`.**
+This repo does not ship changed values because (a) the entrypoints
+intentionally perform **no runtime substitution**, so `${VAR}` in a `.conf`
+file is *not* expanded, and (b) changing the literal value here would break
+every existing deployment's database on update. Change them locally, in
+step, across the compose file, the conference config, and the running
+database.
+
 ## Trusting the EKT license
 
 Upstream code declares the EKT plugin under GNU AGPLv3. The upstream
